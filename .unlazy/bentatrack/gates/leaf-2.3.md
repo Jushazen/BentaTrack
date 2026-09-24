@@ -13,7 +13,7 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
   EXPECT: LINT OK
   EVIDENCE: pending
 
-- [ ] G1: user actions enforce owner-only access, unique usernames, and password rules
+- [ ] G1: user actions enforce owner-only access, unique emails, and password rules
   CHECK: node scripts/gates/require-tests.mjs vitest --ids FR-045,FR-046,USERS-DUP,USERS-STAFF-DENIED tests/integration/users
   EXPECT: REQUIRED TESTS PASSED
   EVIDENCE: pending

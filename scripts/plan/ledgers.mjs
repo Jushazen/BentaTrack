@@ -117,18 +117,19 @@ export const LEAVES = [
       "tests/integration/auth/**",
     ],
     scope:
-      "Username/password login with Auth.js v5 credentials, bcrypt hashes, role-based route protection in src/proxy.ts, and the capability matrix from the PLAN contract.",
+      "Email/password login with NextAuth.js v4 credentials provider (JWT sessions), bcryptjs hashes, role-based route protection in src/proxy.ts (Next 16's renamed middleware), and the capability matrix from the PLAN contract.",
     srs: "§4.8 FR-030–033; amendments A7, B6 (FR-044, FR-046); §5.2; Figure 3",
     notes: [
       "Install browsers once: `npx playwright install chromium`.",
       "Point the Playwright webServer at TEST_DATABASE_URL and seed fixture users in tests/e2e/fixtures.",
       "Read node_modules/next/dist/docs/01-app/02-guides/authentication.md and the proxy.md reference first (Next 16 renamed middleware to proxy).",
+      "NextAuth v4 in the App Router: route handler at src/app/api/auth/[...nextauth]/route.ts, getServerSession(authOptions) on the server. Check that next-auth/middleware's withAuth works as a proxy export; otherwise decode the JWT with getToken in src/proxy.ts.",
     ],
     gates: [
       {
         id: "G1",
         title:
-          "credentials: passwords required, hashed, min 8 chars, usernames unique, deactivated users rejected",
+          "credentials: passwords required, hashed, min 8 chars, emails unique and case-insensitive, deactivated users rejected",
         check: unit(
           ["FR-030", "FR-044", "FR-046", "AUTH-DEACTIVATED"],
           "tests/unit/auth",
@@ -166,7 +167,7 @@ export const LEAVES = [
     gates: [
       {
         id: "G1",
-        title: "user actions enforce owner-only access, unique usernames, and password rules",
+        title: "user actions enforce owner-only access, unique emails, and password rules",
         check: unit(
           ["FR-045", "FR-046", "USERS-DUP", "USERS-STAFF-DENIED"],
           "tests/integration/users",

@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 
 const MODELS = {
-  User: ["id", "username", "name", "passwordHash", "role", "active", "createdAt", "updatedAt"],
+  User: ["id", "email", "name", "passwordHash", "role", "active", "createdAt", "updatedAt"],
   Category: ["id", "name"],
   Supplier: ["id", "name", "contactPerson", "phone", "email", "address"],
   Product: [
@@ -71,7 +71,7 @@ const ENUMS = {
   InventoryChangeType: ["SALE", "RESTOCK", "EDIT", "REFUND", "REMOVAL"],
 };
 // Unique constraints required by the SRS (FR-002, FR-044, FR-043).
-const UNIQUE = { Product: ["code", "barcode"], User: ["username"], Category: ["name"] };
+const UNIQUE = { Product: ["code", "barcode"], User: ["email"], Category: ["name"] };
 
 const text = readFileSync("prisma/schema.prisma", "utf8").replace(/\/\/.*$/gm, "");
 const blocks = {};

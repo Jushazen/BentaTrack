@@ -8,7 +8,7 @@ Full requirements are in `docs/SRS V2.pdf` as amended by `docs/SRS-V2-amendments
 
 ## Tech stack
 
-Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 · Prisma 7 + PostgreSQL (`@prisma/adapter-pg`) · Auth.js v5 (credentials) + bcryptjs · Zod 4 · Dexie (IndexedDB) + Serwist (PWA) · html5-qrcode · Chart.js · next-themes · lucide-react · sonner · date-fns + @date-fns/tz · Vercel + Neon + Vercel Blob. Tests: Vitest (unit + integration), Playwright (e2e, desktop + phone).
+Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 · Prisma 7 + PostgreSQL (`@prisma/adapter-pg`) · NextAuth.js v4 (email + password credentials) + bcryptjs · Zod 4 · Dexie (IndexedDB) + Serwist (PWA) · html5-qrcode · Chart.js · next-themes · lucide-react · sonner · date-fns + @date-fns/tz · Vercel + Neon + Vercel Blob. Tests: Vitest (unit + integration), Playwright (e2e, desktop + phone).
 
 ## Commands
 
@@ -47,6 +47,7 @@ Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 �
 
 ## Domain terms
 
+- **Login:** by email address (unique, stored lowercase) and password (≥ 8 chars, bcrypt-hashed).
 - **Roles:** `OWNER` (full access) and `STAFF` (sales, refunds, restock, add/edit products; no delete, costs, suppliers, reports, categories, or users).
 - **Product status** (computed): Active, Low Stock (0 < qty ≤ threshold, default 5), Out of Stock (0). Out of stock ≠ discontinued; only the owner deletes discontinued products.
 - **Sale** has many **SaleItems**; whole-sale discount (amount or percent); payment `CASH` or `GCASH` only.

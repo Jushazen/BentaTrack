@@ -10,7 +10,7 @@ Ledgers are generated from `scripts/plan/ledgers.mjs`; edit the ledger directly 
 ## Contract
 
 - **Host launch mode:** sequential fallback. One leaf per working session, driven by the user, in the build order below. No parallel dispatch waves are opened, so no ownership claims or leases are used.
-- **Toolchain:** Node ≥ 22 (dev machine: 24.17), npm, Windows PowerShell or cmd. Local Postgres 17 via `docker compose` on port 5433. Next.js 16.3 (App Router, Turbopack, `src/proxy.ts` not `middleware.ts`), React 19.2, Prisma 7.10 with `@prisma/adapter-pg`, Auth.js v5 beta, Tailwind 4, Vitest 5, Playwright.
+- **Toolchain:** Node ≥ 22 (dev machine: 24.17), npm, Windows PowerShell or cmd. Local Postgres 17 via `docker compose` on port 5433. Next.js 16.3 (App Router, Turbopack, `src/proxy.ts` not `middleware.ts`), React 19.2, Prisma 7.10 with `@prisma/adapter-pg`, NextAuth.js v4.24 (stable), Tailwind 4, Vitest 5, Playwright.
 - **Running gates:** always from the repo root: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeout 900 <ledger>`. First run of a new CHECK needs `--approve` after reading it.
 - **Test tagging:** every test that proves a requirement puts its ID in brackets in the title, e.g. `test("[FR-005] sale reduces stock", …)`. `scripts/gates/require-tests.mjs` fails if any listed ID has no passing test or any test fails.
 - **Test databases:** integration tests and Playwright use `TEST_DATABASE_URL` (`bentatrack_test`), never the dev database. Playwright's webServer runs a production build on port 3200 against the test DB. Every e2e test runs in both `desktop` and `phone` projects.
@@ -47,7 +47,7 @@ See `CLAUDE.md` "Coding conventions". Manual gates are reviewed by the team lead
 
 ## Current contract inventory
 
-Contract revision: 1 (SRS V2 + amendments of 2026-09-24).
+Contract revision: 2 (SRS V2 + amendments of 2026-09-24; rev 2: email login, NextAuth v4, Refund tables confirmed).
 
 | ID | Required outcome or constraint | Owner | Observing gate or manual review | Disposition | Revision |
 |---|---|---|---|---|---|
@@ -95,7 +95,7 @@ Contract revision: 1 (SRS V2 + amendments of 2026-09-24).
 | C42 | FR-041 owner manages supplier records (B4) | 3.3 | leaf-3.3:G1, leaf-3.3:G2 | ACTIVE | 1 |
 | C43 | FR-042 product references a supplier; owner-only visibility | 2.1, 3.2, 3.3 | leaf-2.1:G2, leaf-3.2:G1, leaf-3.3:G1 | ACTIVE | 1 |
 | C44 | FR-043 owner manages categories; in-use category not deletable (B5) | 3.3 | leaf-3.3:G1, leaf-3.3:G2 | ACTIVE | 1 |
-| C45 | FR-044 unique username login (B6) | 2.1, 2.2 | leaf-2.1:G2, leaf-2.2:G1 | ACTIVE | 1 |
+| C45 | FR-044 unique email login (B6) | 2.1, 2.2 | leaf-2.1:G2, leaf-2.2:G1 | ACTIVE | 2 |
 | C46 | FR-045 owner creates, resets, deactivates accounts | 2.3 | leaf-2.3:G1, leaf-2.3:G2 | ACTIVE | 1 |
 | C47 | FR-046 passwords ≥ 8 chars, stored hashed | 2.2, 2.3 | leaf-2.2:G1, leaf-2.3:G1 | ACTIVE | 1 |
 | C48 | FR-047 gross profit, owner only; products without cost excluded | 5.1 | leaf-5.1:G1 | ACTIVE | 1 |
@@ -119,7 +119,7 @@ Contract revision: 1 (SRS V2 + amendments of 2026-09-24).
 | C66 | §2.5 a website, not a native app (installable PWA) | 6.1 | leaf-6.1:G2 (PWA-MANIFEST) | ACTIVE | 1 |
 | C67 | §3.1 all listed screens exist | 1.1 + feature leaves | GATES.md:G10, each feature's e2e gate | ACTIVE | 1 |
 | C68 | §5.4 room to add receipts or delivery later without redesign | root | root:R2 architecture review | ACTIVE | 1 |
-| C69 | §2.4 stack (with D2 substitutions: Serwist, bcryptjs) | 1.1 | GATES.md:G1 | ACTIVE | 1 |
+| C69 | §2.4 stack (with D2 substitutions: Serwist, bcryptjs; NextAuth v4) | 1.1 | GATES.md:G1 | ACTIVE | 2 |
 | C70 | §2.4 deployed on Vercel + Neon + Vercel Blob | 7.2 | leaf-7.2:G2, leaf-7.2:G3 | OWNER_DECISION | 1 |
 | C71 | §6.1 schema as amended (C1–C7) | 2.1 | leaf-2.1:G2, leaf-2.1:G3 | ACTIVE | 1 |
 | C72 | §2.1 system flow works end to end | 7.1 | leaf-7.1:G1, root:R3 | ACTIVE | 1 |
@@ -190,7 +190,7 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 | Leaf | Owns | Needs | Tier | Planned wave | State |
 |---|---|---|---|---|---|
 | 1.1 | see GATES.md OWNS | - | mechanical | 1 | VERIFIED |
-| 2.1 | prisma/schema.prisma, prisma/migrations/\*\*, prisma/seed.ts, src/lib/db.ts, src/lib/money.ts, src/lib/stock-status.ts, src/lib/inventory-log.ts, src/lib/commands.ts, src/lib/result.ts, tests/integration/helpers/\*\*, tests/integration/data/\*\*, tests/unit/data/\*\*, package.json | 1.1 | judgment | 2 | WAITING |
+| 2.1 | prisma/schema.prisma, prisma/migrations/\*\*, prisma/seed.ts, src/lib/db.ts, src/lib/money.ts, src/lib/stock-status.ts, src/lib/inventory-log.ts, src/lib/commands.ts, src/lib/result.ts, tests/integration/helpers/\*\*, tests/integration/data/\*\*, tests/unit/data/\*\*, package.json | 1.1 | judgment | 2 | IN-FLIGHT |
 | 2.2 | src/lib/auth.ts, src/lib/permissions.ts, src/proxy.ts, src/app/(auth)/\*\*, src/app/api/auth/\*\*, src/types/\*\*, playwright.config.ts, tests/e2e/fixtures/\*\*, tests/e2e/auth/\*\*, tests/unit/auth/\*\*, tests/integration/auth/\*\* | 2.1 | judgment | 3 | WAITING |
 | 3.1 | src/app/layout.tsx, src/app/page.tsx, src/app/globals.css, src/app/(app)/layout.tsx, src/components/layout/\*\*, src/components/ui/\*\*, public/brand/\*\*, tests/e2e/shell/\*\*, tests/unit/shell/\*\* | 2.2 | judgment | 4 | WAITING |
 | 2.3 | src/features/users/\*\*, src/app/(app)/users/\*\*, tests/integration/users/\*\*, tests/e2e/users/\*\* | 2.2, 3.1 | mechanical | 5 | WAITING |

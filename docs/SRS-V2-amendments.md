@@ -91,10 +91,10 @@ Add these to §4 using the next free IDs (FR-037 onward).
 
 ### B6. ADD: User account management (new FRs in §4.8)
 - **Where:** §4.8. §3.1 lists a "User Accounts (Owner only)" screen, but no FR says what it does, and the User table has no login name.
-- **FR-044:** "Users shall log in with a unique username and password."
+- **FR-044:** "Users shall log in with a unique email address and password."
 - **FR-045:** "The Owner/Administrator shall be able to create staff accounts, reset staff passwords, and deactivate or reactivate accounts. Deactivated users cannot log in, but their past records remain."
 - **FR-046:** "Passwords shall be at least 8 characters and stored only as a hash."
-- **§6.1 User Accounts table:** Add `Username | Text, unique` and `Active | Yes/No`.
+- **§6.1 User Accounts table:** Add `Email | Text, unique` and `Active | Yes/No`.
 
 ### B7. ADD: Report rules (edit FR-021, FR-022)
 - **Where:** §4.6
@@ -183,7 +183,7 @@ Add these to §4 using the next free IDs (FR-037 onward).
 ### C6. User Accounts Table: add these fields
 | Field | Data Type | Description |
 |---|---|---|
-| Username | Text, unique | Login name (FR-044) |
+| Email | Text, unique | Login name (FR-044) |
 | Active | Yes/No | Deactivated users cannot log in (FR-045) |
 
 ### C7. New Refund and Refund Item Tables
@@ -221,7 +221,7 @@ Also update the §6.1 intro from "four main tables" to "nine tables: Product, Ca
 | Category | Change |
 |---|---|
 | Frontend | Replace `next-pwa` with `Serwist (@serwist/next)`, the maintained successor. `next-pwa` does not support the current Next.js App Router. Add `next-themes`, `lucide-react` (icons), `sonner` (pop-up notifications). |
-| Backend | Replace `bcrypt` with `bcryptjs` (same algorithm, no native build step on Windows or Vercel). |
+| Backend | Replace `bcrypt` with `bcryptjs` (same algorithm, no native build step on Windows or Vercel). Use NextAuth.js **v4** (stable), credentials provider. |
 | Database | Add "Hosted on Neon Postgres (via Vercel) in production; Docker PostgreSQL for local development." |
 | File storage | New row: "Vercel Blob for product images." |
 | Region / Locale | New row: "Philippine peso (₱), Asia/Manila time zone." |
