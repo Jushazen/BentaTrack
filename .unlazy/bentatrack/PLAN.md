@@ -28,7 +28,7 @@ Ledgers are generated from `scripts/plan/ledgers.mjs`; edit the ledger directly 
 - **Validation:** every server action parses input with a Zod schema from its feature's `schemas.ts` before touching the database.
 - **Inventory log:** `recordInventoryChange(tx, { productId, type, quantityChange, userId, saleId?, refundId?, note?, occurredAt })` in `src/lib/inventory-log.ts` computes `stockAfter` and snapshots, inside the caller's transaction.
 - **Low-stock alerts:** every stock-changing action returns `lowStockAlerts: { productId, name, quantity, threshold }[]` for products that crossed into LOW_STOCK or OUT_OF_STOCK. Client calls `showLowStockAlerts()` from `src/components/layout/low-stock-alerts.tsx` (leaf 3.1). The shell also shows a summary on app open (FR-007).
-- **Image storage:** `storeProductImage(file) → url` in `src/lib/storage.ts` uses Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set, else `public/uploads/` (dev only).
+- **Image storage:** `storeProductImage(file) → url` in `src/lib/storage.ts` uses Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set, else local disk `.uploads/products/` (dev/test only), served to signed-in users by `src/app/(app)/products/images/[file]/route.ts`. (Amended in leaf 3.2: `next start` only serves files present in `public/` at startup.)
 
 ### Permissions (capability matrix)
 
@@ -195,9 +195,9 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 | 3.1 | src/app/layout.tsx, src/app/page.tsx, src/app/globals.css, src/app/(app)/layout.tsx, src/components/layout/\*\*, src/components/ui/\*\*, public/brand/\*\*, .tastemaker/\*\*, docs/design/\*\*, src/app/(auth)/login/\*\*, src/app/(auth)/forbidden/\*\*, tests/e2e/shell/\*\*, tests/unit/shell/\*\* | 2.2 | judgment | 4 | VERIFIED |
 | 2.3 | src/features/users/\*\*, src/app/(app)/users/\*\*, tests/integration/users/\*\*, tests/e2e/users/\*\* | 2.2, 3.1 | mechanical | 5 | VERIFIED |
 | 3.3 | src/features/categories/\*\*, src/features/suppliers/\*\*, src/app/(app)/categories/\*\*, src/app/(app)/suppliers/\*\*, tests/integration/catalog/\*\*, tests/e2e/catalog/\*\* | 2.2, 3.1 | mechanical | 5 | VERIFIED |
-| 3.2 | src/features/products/\*\*, src/app/(app)/products/\*\*, src/lib/storage.ts, tests/integration/products/\*\*, tests/e2e/products/\*\* | 3.3 | judgment | 6 | READY |
-| 3.4 | src/features/inventory/\*\*, src/app/(app)/inventory-history/\*\*, tests/integration/inventory/\*\*, tests/e2e/inventory/\*\* | 3.2 | mechanical | 7 | WAITING |
-| 3.5 | src/features/search/\*\*, src/components/scanner/\*\*, tests/integration/search/\*\*, tests/e2e/search/\*\*, tests/unit/search/\*\* | 3.2 | judgment | 7 | WAITING |
+| 3.2 | src/features/products/\*\*, src/app/(app)/products/\*\*, src/lib/storage.ts, tests/integration/products/\*\*, tests/e2e/products/\*\* | 3.3 | judgment | 6 | VERIFIED |
+| 3.4 | src/features/inventory/\*\*, src/app/(app)/inventory-history/\*\*, tests/integration/inventory/\*\*, tests/e2e/inventory/\*\* | 3.2 | mechanical | 7 | READY |
+| 3.5 | src/features/search/\*\*, src/components/scanner/\*\*, tests/integration/search/\*\*, tests/e2e/search/\*\*, tests/unit/search/\*\* | 3.2 | judgment | 7 | READY |
 | 4.1 | src/features/sales/\*\*, src/app/(app)/checkout/\*\*, tests/unit/sales/\*\*, tests/integration/sales/\*\*, tests/e2e/checkout/\*\* | 3.4, 3.5 | judgment | 8 | WAITING |
 | 4.2 | src/features/refunds/\*\*, src/app/(app)/sales/\*\*, tests/integration/refunds/\*\*, tests/e2e/refunds/\*\* | 4.1 | mechanical | 9 | WAITING |
 | 5.1 | src/features/reports/\*\*, src/lib/dates.ts, src/app/(app)/reports/\*\*, src/components/charts/\*\*, tests/unit/reports/\*\*, tests/integration/reports/\*\*, tests/e2e/reports/\*\* | 4.2 | judgment | 10 | WAITING |

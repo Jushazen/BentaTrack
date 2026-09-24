@@ -64,3 +64,6 @@ unlazy-status.log
 .unlazy/*/hook-state.json
 .unlazy/*/dispatch.json
 .unlazy/locks/
+
+# local product images when Vercel Blob is not configured (src/lib/storage.ts)
+/.uploads

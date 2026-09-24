@@ -15,7 +15,7 @@ Run from the repository root in PowerShell or cmd with Node 24 on PATH:
 - [x] G1: dependencies install cleanly from the lockfile with zero known vulnerabilities
   CHECK: npm ci
   EXPECT: found 0 vulnerabilities
-  EVIDENCE: automatic-evidence=v1; definition-sha256=259ffee9eb3dcb32213f8a12c77729e65e0efc2ae65898ae5fe52a95ab0bd63d; exit=0; EXPECT=matched; output-sha256=d8b32f0eabea079aa167ea122c00a8fe596efd6f93b6ae00ebdb9e7059e8b97e; output-bytes=532; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=259ffee9eb3dcb32213f8a12c77729e65e0efc2ae65898ae5fe52a95ab0bd63d; exit=0; EXPECT=matched; output-sha256=5d5d4a10d0bb442127dd80802aaf5cf6f25e0000384e2e97d28ea053e5069b81; output-bytes=532; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
 
 - [x] G2: the Prisma schema and prisma.config.ts are valid
   CHECK: npx prisma validate
@@ -40,7 +40,7 @@ Run from the repository root in PowerShell or cmd with Node 24 on PATH:
 - [x] G6: the production build compiles
   CHECK: npm run build
   EXPECT: /Compiled successfully/
-  EVIDENCE: automatic-evidence=v1; definition-sha256=913acd00766cb43549aaebd0c1c45beed944a0ca2f0d85005304fa0c8f5dc661; exit=0; EXPECT=matched; output-sha256=1afbca786f8dd67e7133841a3a7d6390dd6d85af7fd37de8114714827cb0634a; output-bytes=1054; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=913acd00766cb43549aaebd0c1c45beed944a0ca2f0d85005304fa0c8f5dc661; exit=0; EXPECT=matched; output-sha256=7fb42447a24c5af52f6b48a9aaa5e3fdc6ec605ce269758d59f9c29090d9c1fc; output-bytes=1112; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
 
 - [x] G7: the dev server starts and serves the home page with HTTP 200 and no error overlay
   CHECK: node scripts/gates/check-dev-server.mjs
@@ -50,7 +50,7 @@ Run from the repository root in PowerShell or cmd with Node 24 on PATH:
 - [x] G8: the unit test runner executes the smoke tests and all pass
   CHECK: npm test
   EXPECT: /Tests\s+\d+ passed \(\d+\)/
-  EVIDENCE: automatic-evidence=v1; definition-sha256=c272898e03882393443af772473570173cc4e8b77ab99d2b0c80e22ad3b67b38; exit=0; EXPECT=matched; output-sha256=79c78bd3a03916428231574a7eaeff43f2118a3e38580a43c15f6bb30aba1e2b; output-bytes=464; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=c272898e03882393443af772473570173cc4e8b77ab99d2b0c80e22ad3b67b38; exit=0; EXPECT=matched; output-sha256=ab2d1e23d9f5d5159ea2d21c3f903fe412719020493d6b5f218a668e0b888c0d; output-bytes=464; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
 
 - [x] G9: .env is git-ignored, .env.example is committed, and the example holds no real secrets
   CHECK: node scripts/gates/check-env-safety.mjs
