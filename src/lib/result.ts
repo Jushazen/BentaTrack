@@ -22,3 +22,16 @@ export function fail(
 ): Result<never> {
   return { ok: false, error: fieldErrors ? { code, message, fieldErrors } : { code, message } };
 }
+
+/** A VALIDATION failure listing each field's messages, from a Zod error's `issues`. */
+export function invalid(
+  issues: readonly { path: readonly PropertyKey[]; message: string }[],
+  message = "Please check the highlighted fields.",
+): Result<never> {
+  const fieldErrors: Record<string, string[]> = {};
+  for (const issue of issues) {
+    const field = String(issue.path[0] ?? "form");
+    (fieldErrors[field] ??= []).push(issue.message);
+  }
+  return fail("VALIDATION", message, fieldErrors);
+}

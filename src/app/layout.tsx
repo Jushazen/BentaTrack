@@ -1,26 +1,34 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Gloock, Inter } from "next/font/google";
+import { Providers } from "@/components/layout/providers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
+const gloock = Gloock({ variable: "--font-gloock", subsets: ["latin"], weight: "400" });
 
 export const metadata: Metadata = {
   title: "BentaTrack",
   description: "Inventory and sales management for Estetika",
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#140e0b" },
+  ],
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">{children}</body>
+    // next-themes sets data-theme before paint, so the attribute differs from the server render.
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${gloock.variable} h-full antialiased`}
+    >
+      <body className="min-h-full">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

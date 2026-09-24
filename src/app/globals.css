@@ -1,26 +1,111 @@
+/* tastemaker: app-shell | mood elegant (toned for Operate) | seed 3 hand-tuned, white + leather brown
+   | contrast verified light + dark 2026-09-24 | tokens: .tastemaker/style-lock.md */
 @import "tailwindcss";
 
+/* Dark mode follows the data-theme attribute set by next-themes. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #ffffff;
+  --surface: #f8f3f0;
+  --text: #221814;
+  --muted: #6b5850;
+  --primary: #7a4e3c;
+  --on-primary: #ffffff;
+  --secondary: #efe4de;
+  --accent: #a86f4c;
+  --border: #e5d9d3;
+  --warn: #a3470a;
+  --danger: #b42318;
+  --ok: #18733c;
+  /* Active-nav indicator and text links: primary in light, accent in dark (contrast contract). */
+  --indicator: var(--primary);
+  --link: var(--primary);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #140e0b;
+  --surface: #201916;
+  --text: #fdeee9;
+  --muted: #bfaba2;
+  --primary: #9b6a58;
+  --on-primary: #ffffff;
+  --secondary: #392a25;
+  --accent: #d19a78;
+  --border: #3a302c;
+  --warn: #f5a524;
+  --danger: #f47067;
+  --ok: #5fce86;
+  --indicator: var(--accent);
+  --link: var(--accent);
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-indicator: var(--indicator);
+  --color-link: var(--link);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-gloock);
+  --ease-out: var(--ease-out);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Page titles use the display serif; everything else stays Inter. */
+main h1 {
+  font-family: var(--font-gloock), Georgia, serif;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+@media (min-width: 1024px) {
+  main h1 {
+    font-size: 1.75rem;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* One visible focus style everywhere (keyboard users). */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+[data-theme="dark"] :focus-visible {
+  outline-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

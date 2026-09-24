@@ -37,7 +37,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   return (
     <form onSubmit={onSubmit} className="mt-8 space-y-5" noValidate>
       <div className="space-y-1.5">
-        <label htmlFor="email" className="block text-sm font-medium">
+        <label htmlFor="email" className="text-text block text-sm font-medium">
           Email
         </label>
         <input
@@ -46,11 +46,11 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
           type="email"
           autoComplete="username"
           required
-          className="w-full rounded-md border border-current/25 bg-transparent px-3 py-2.5 text-base"
+          className="border-border bg-bg text-text w-full rounded-lg border px-3 py-2.5 text-base"
         />
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="password" className="block text-sm font-medium">
+        <label htmlFor="password" className="text-text block text-sm font-medium">
           Password
         </label>
         <input
@@ -59,12 +59,12 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
           type="password"
           autoComplete="current-password"
           required
-          className="w-full rounded-md border border-current/25 bg-transparent px-3 py-2.5 text-base"
+          className="border-border bg-bg text-text w-full rounded-lg border px-3 py-2.5 text-base"
         />
       </div>
 
       {error && (
-        <p role="alert" className="flex items-start gap-2 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-danger flex items-start gap-2 text-sm">
           <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" />
           <span>{error}</span>
         </p>
@@ -73,7 +73,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="flex w-full items-center justify-center gap-2 rounded-md bg-amber-900 px-4 py-2.5 font-medium text-white disabled:opacity-60"
+        className="bg-primary text-on-primary flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 font-medium transition-[filter] duration-100 ease-out hover:brightness-110 disabled:opacity-60"
       >
         <LogIn aria-hidden className="size-4" />
         <span>{pending ? "Logging in…" : "Log in"}</span>

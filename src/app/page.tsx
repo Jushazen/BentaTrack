@@ -1,4 +1,6 @@
-// BentaTrack. Implemented in leaf 3.1 (redirects to /dashboard).
+import { redirect } from "next/navigation";
+
+// The app starts at the dashboard; the proxy sends signed-out visitors to /login first.
 export default function HomePage() {
-  return <h1>BentaTrack</h1>;
+  redirect("/dashboard");
 }

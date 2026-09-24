@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
-import HomePage from "@/app/page";
+import { Wordmark } from "@/components/layout/wordmark";
 
-test("[SETUP-1] home page renders the app name", () => {
-  render(<HomePage />);
-  expect(screen.getByRole("heading", { name: "BentaTrack" })).toBeTruthy();
+test("[SETUP-1] React components render in the unit test environment", () => {
+  render(<Wordmark />);
+  expect(screen.getByText("Estetika")).toBeTruthy();
+  expect(screen.getByText("BentaTrack")).toBeTruthy();
 });
 
 test("[SETUP-2] IndexedDB is available for offline storage tests", () => {
