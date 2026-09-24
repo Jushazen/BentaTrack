@@ -191,8 +191,8 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 |---|---|---|---|---|---|
 | 1.1 | see GATES.md OWNS | - | mechanical | 1 | VERIFIED |
 | 2.1 | prisma/schema.prisma, prisma/migrations/\*\*, prisma/seed.ts, src/lib/db.ts, src/lib/money.ts, src/lib/stock-status.ts, src/lib/inventory-log.ts, src/lib/commands.ts, src/lib/result.ts, tests/integration/helpers/\*\*, tests/integration/data/\*\*, tests/unit/data/\*\*, package.json | 1.1 | judgment | 2 | VERIFIED |
-| 2.2 | src/lib/auth.ts, src/lib/permissions.ts, src/proxy.ts, src/app/(auth)/\*\*, src/app/api/auth/\*\*, src/types/\*\*, playwright.config.ts, tests/e2e/fixtures/\*\*, tests/e2e/auth/\*\*, tests/unit/auth/\*\*, tests/integration/auth/\*\* | 2.1 | judgment | 3 | READY |
-| 3.1 | src/app/layout.tsx, src/app/page.tsx, src/app/globals.css, src/app/(app)/layout.tsx, src/components/layout/\*\*, src/components/ui/\*\*, public/brand/\*\*, tests/e2e/shell/\*\*, tests/unit/shell/\*\* | 2.2 | judgment | 4 | WAITING |
+| 2.2 | src/lib/auth.ts, src/lib/permissions.ts, src/proxy.ts, src/app/(auth)/\*\*, src/app/api/auth/\*\*, src/types/\*\*, playwright.config.ts, tests/e2e/fixtures/\*\*, tests/e2e/auth/\*\*, tests/unit/auth/\*\*, tests/integration/auth/\*\* | 2.1 | judgment | 3 | VERIFIED |
+| 3.1 | src/app/layout.tsx, src/app/page.tsx, src/app/globals.css, src/app/(app)/layout.tsx, src/components/layout/\*\*, src/components/ui/\*\*, public/brand/\*\*, tests/e2e/shell/\*\*, tests/unit/shell/\*\* | 2.2 | judgment | 4 | IN-FLIGHT |
 | 2.3 | src/features/users/\*\*, src/app/(app)/users/\*\*, tests/integration/users/\*\*, tests/e2e/users/\*\* | 2.2, 3.1 | mechanical | 5 | WAITING |
 | 3.3 | src/features/categories/\*\*, src/features/suppliers/\*\*, src/app/(app)/categories/\*\*, src/app/(app)/suppliers/\*\*, tests/integration/catalog/\*\*, tests/e2e/catalog/\*\* | 2.2, 3.1 | mechanical | 5 | WAITING |
 | 3.2 | src/features/products/\*\*, src/app/(app)/products/\*\*, src/lib/storage.ts, tests/integration/products/\*\*, tests/e2e/products/\*\* | 3.3 | judgment | 6 | WAITING |
