@@ -4,7 +4,7 @@
 // (PLAN contract); the client passes them to showLowStockAlerts(). The shell also
 // announces the current low-stock count once per session when the app opens.
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 export type LowStockAlert = {
@@ -41,7 +41,12 @@ const SESSION_KEY = "bentatrack:low-stock-announced";
 /** Announces low/out-of-stock products once per browser session (FR-007). */
 export function LowStockOnOpen({ count }: { count: number }) {
   const router = useRouter();
+  // Only the count when the app opens is announced. Later changes (after a sale refreshes the
+  // layout) already come with their own per-product pop-ups (FR-008).
+  const opened = useRef(false);
   useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
     if (count <= 0) return;
     try {
       if (sessionStorage.getItem(SESSION_KEY)) return;

@@ -22,10 +22,13 @@ export function isCommandId(id: string): boolean {
   return UUID.test(id);
 }
 
+/** Busy products (two tills selling the same item) can conflict a few times in a row. */
+const MAX_ATTEMPTS = 5;
+
 /**
  * Runs `apply` at most once per id. Uses a serializable transaction, and if two copies of
  * the same command race, the loser's unique-key violation is resolved by returning the
- * winner's result.
+ * winner's result. Different commands that conflict (e.g. two sales of one product) are retried.
  */
 export async function runIdempotent<T>(command: IdempotentCommand<T>): Promise<CommandOutcome<T>> {
   if (!isCommandId(command.id)) throw new Error("command id must be a UUID");
@@ -38,21 +41,26 @@ export async function runIdempotent<T>(command: IdempotentCommand<T>): Promise<C
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-  try {
-    return await attempt();
-  } catch (err) {
-    if (isRetryable(err)) {
+  for (let tries = 1; ; tries++) {
+    try {
+      return await attempt();
+    } catch (err) {
+      if (!isRetryable(err) || tries >= MAX_ATTEMPTS) throw err;
       const existing = await db.$transaction((tx) => command.findExisting(tx, command.id));
       if (existing !== null) return { replayed: true, result: existing };
-      return attempt();
+      // Short random pause so the conflicting transactions don't collide again in lockstep.
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 20 * tries));
     }
-    throw err;
   }
 }
 
 function isRetryable(err: unknown): boolean {
-  return (
-    err instanceof Prisma.PrismaClientKnownRequestError &&
-    (err.code === "P2002" || err.code === "P2034")
-  );
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (err.code === "P2002" || err.code === "P2034") return true;
+  // A serialization failure or deadlock inside a raw query (e.g. SELECT … FOR UPDATE) arrives
+  // as P2010 with the Postgres SQLSTATE on the driver adapter's cause.
+  const meta = err.meta as
+    { driverAdapterError?: { cause?: { originalCode?: string } } } | undefined;
+  const sqlState = meta?.driverAdapterError?.cause?.originalCode;
+  return sqlState === "40001" || sqlState === "40P01";
 }

@@ -42,6 +42,9 @@ async function expectVisibleTextOnAllControls(page: Page, where: string) {
 }
 
 // One product at or below its threshold, so the app has something to announce (FR-007).
+// Other suites add low-stock products to the same test database, so the expected count is read
+// back with the app's rule (quantity at or below the product's own threshold).
+let lowStock = 0;
 test.beforeAll(async () => {
   dotenv.config({ quiet: true });
   const client = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
@@ -56,6 +59,10 @@ test.beforeAll(async () => {
        on conflict (code) do update set "stockQuantity" = 2, "lowStockThreshold" = 5`,
       [randomUUID(), rows[0].id],
     );
+    const count = await client.query<{ n: number }>(
+      `select count(*)::int as n from "Product" where "stockQuantity" <= "lowStockThreshold"`,
+    );
+    lowStock = count.rows[0].n;
   } finally {
     await client.end();
   }
@@ -160,7 +167,12 @@ test("[UI-THEME] switching to dark changes the colours and survives a reload", a
 
 test("[FR-007] opening the app announces products that are low on stock", async ({ page }) => {
   await logInAs(page, "owner");
-  const notice = page.getByText(/1 product is low on stock or out of stock\./);
+  expect(lowStock).toBeGreaterThanOrEqual(1);
+  const notice = page.getByText(
+    lowStock === 1
+      ? "1 product is low on stock or out of stock."
+      : `${lowStock} products are low on stock or out of stock.`,
+  );
   await expect(notice).toBeVisible();
   await page.getByRole("button", { name: "View" }).click();
   await expect(page).toHaveURL(/\/products\?stock=low$/);
@@ -171,8 +183,8 @@ test("[FR-007] the Products menu item shows the low-stock count", async ({ page 
   if (isPhone(info)) {
     await expect(
       page.getByRole("link", { name: /Products/ }).locator("visible=true"),
-    ).toContainText("1");
+    ).toContainText(String(lowStock));
   } else {
-    await expect(page.getByLabel("1 low on stock").locator("visible=true")).toBeVisible();
+    await expect(page.getByLabel(`${lowStock} low on stock`).locator("visible=true")).toBeVisible();
   }
 });

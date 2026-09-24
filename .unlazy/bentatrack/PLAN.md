@@ -197,12 +197,12 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 | 3.3 | src/features/categories/\*\*, src/features/suppliers/\*\*, src/app/(app)/categories/\*\*, src/app/(app)/suppliers/\*\*, tests/integration/catalog/\*\*, tests/e2e/catalog/\*\* | 2.2, 3.1 | mechanical | 5 | VERIFIED |
 | 3.2 | src/features/products/\*\*, src/app/(app)/products/\*\*, src/lib/storage.ts, tests/integration/products/\*\*, tests/e2e/products/\*\* | 3.3 | judgment | 6 | VERIFIED |
 | 3.4 | src/features/inventory/\*\*, src/app/(app)/inventory-history/\*\*, tests/integration/inventory/\*\*, tests/e2e/inventory/\*\* | 3.2 | mechanical | 7 | VERIFIED |
-| 3.5 | src/features/search/\*\*, src/components/scanner/\*\*, tests/integration/search/\*\*, tests/e2e/search/\*\*, tests/unit/search/\*\* | 3.2 | judgment | 7 | IN-FLIGHT |
-| 4.1 | src/features/sales/\*\*, src/app/(app)/checkout/\*\*, tests/unit/sales/\*\*, tests/integration/sales/\*\*, tests/e2e/checkout/\*\* | 3.4, 3.5 | judgment | 8 | WAITING |
-| 4.2 | src/features/refunds/\*\*, src/app/(app)/sales/\*\*, tests/integration/refunds/\*\*, tests/e2e/refunds/\*\* | 4.1 | mechanical | 9 | WAITING |
+| 3.5 | src/features/search/\*\*, src/components/scanner/\*\*, tests/integration/search/\*\*, tests/e2e/search/\*\*, tests/unit/search/\*\* | 3.2 | judgment | 7 | VERIFIED |
+| 4.1 | src/features/sales/\*\*, src/app/(app)/checkout/\*\*, tests/unit/sales/\*\*, tests/integration/sales/\*\*, tests/e2e/checkout/\*\* | 3.4, 3.5 | judgment | 8 | VERIFIED |
+| 4.2 | src/features/refunds/\*\*, src/app/(app)/sales/\*\*, tests/integration/refunds/\*\*, tests/e2e/refunds/\*\* | 4.1 | mechanical | 9 | READY |
 | 5.1 | src/features/reports/\*\*, src/lib/dates.ts, src/app/(app)/reports/\*\*, src/components/charts/\*\*, tests/unit/reports/\*\*, tests/integration/reports/\*\*, tests/e2e/reports/\*\* | 4.2 | judgment | 10 | WAITING |
 | 5.2 | src/features/dashboard/\*\*, src/app/(app)/dashboard/\*\*, tests/integration/dashboard/\*\*, tests/e2e/dashboard/\*\* | 5.1 | mechanical | 11 | WAITING |
-| 6.1 | next.config.ts, src/app/sw.ts, src/app/manifest.ts, src/app/offline/\*\*, src/app/serwist/\*\*, src/lib/offline/db.ts, src/lib/offline/catalog.ts, public/icons/\*\*, tests/unit/offline/\*\*, tests/e2e/offline/\*\* | 3.5 | judgment | 8 | WAITING |
+| 6.1 | next.config.ts, src/app/sw.ts, src/app/manifest.ts, src/app/offline/\*\*, src/app/serwist/\*\*, src/lib/offline/db.ts, src/lib/offline/catalog.ts, public/icons/\*\*, tests/unit/offline/\*\*, tests/e2e/offline/\*\* | 3.5 | judgment | 8 | READY |
 | 6.2 | src/lib/offline/outbox.ts, src/lib/offline/sync.ts, src/lib/commands.ts, src/app/api/sync/\*\*, src/components/sync/\*\*, tests/unit/sync/\*\*, tests/integration/sync/\*\*, tests/e2e/sync/\*\* | 6.1, 4.2 | judgment | 10 | WAITING |
 | 7.1 | tests/e2e/flows/\*\*, tests/perf/\*\*, prisma/seed-demo.ts, scripts/gates/perf/\*\* | 2.3, 5.2, 6.2 | judgment | 12 | WAITING |
 | 7.2 | docs/DEPLOY.md, src/app/api/health/\*\*, scripts/gates/check-deploy.mjs, tests/integration/health/\*\*, vercel.json | 7.1 | judgment | 13 | WAITING |

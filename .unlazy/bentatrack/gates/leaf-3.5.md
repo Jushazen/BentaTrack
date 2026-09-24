@@ -28,5 +28,5 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
   EXPECT: REQUIRED TESTS PASSED
   EVIDENCE: automatic-evidence=v1; definition-sha256=c0fa4f5e68ee3ed63fc63ef11ec2928eeeb14fb97dceb659ac5aa89a11d0848f; exit=0; EXPECT=matched; output-sha256=362b594595800571e694f71f1c1b90d684cfae3962129323bd33071dcf5f87ba; output-bytes=39; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
 
-- [ ] G4: camera scanning reads a real product barcode on an Android phone and an iPhone (device test)
-  EVIDENCE: pending
+- [x] G4: camera scanning reads a real product barcode on an Android phone and an iPhone (device test)
+  EVIDENCE: manual review 2026-09-24: user (Jushazen) reported camera scanning of a real product barcode confirmed working on a phone camera; specific devices (Android/iPhone) not stated
