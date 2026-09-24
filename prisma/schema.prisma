@@ -1,5 +1,5 @@
-// BentaTrack data model. Models are added in leaf 2.1 (see .unlazy/bentatrack/PLAN.md)
-// following SRS §6.1 as amended by docs/SRS-V2-amendments.md section C.
+// BentaTrack data model: SRS §6.1 as amended by docs/SRS-V2-amendments.md section C.
+// Money is stored as integer centavos (₱150.50 = 15050). Times are UTC.
 
 generator client {
   provider = "prisma-client"
@@ -8,4 +8,206 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  STAFF
+}
+
+enum PaymentMethod {
+  CASH
+  GCASH
+}
+
+enum DiscountType {
+  AMOUNT
+  PERCENT
+}
+
+enum InventoryChangeType {
+  SALE
+  RESTOCK
+  EDIT
+  REFUND
+  REMOVAL
+}
+
+/// FR-030–033, FR-044–046. Email is stored lowercase.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sales            Sale[]
+  refunds          Refund[]
+  inventoryChanges InventoryChange[]
+}
+
+/// FR-043. Owner-managed.
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+}
+
+/// FR-041–042. Owner-only.
+model Supplier {
+  id            String   @id @default(cuid())
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  products Product[]
+}
+
+/// FR-002, FR-037. Status (Active / Low Stock / Out of Stock) is computed, not stored.
+model Product {
+  id                String    @id @default(cuid())
+  name              String
+  code              String    @unique
+  barcode           String?   @unique
+  categoryId        String
+  category          Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand             String?
+  supplierId        String?
+  supplier          Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  /// Centavos. Optional: staff-created products leave it for the owner (A7 follow-on).
+  purchasePrice     Int?
+  /// Centavos.
+  sellingPrice      Int
+  stockQuantity     Int       @default(0)
+  lowStockThreshold Int       @default(5)
+  expirationDate    DateTime? @db.Date
+  imageUrl          String?
+  /// "Date added" in the SRS.
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  saleItems        SaleItem[]
+  inventoryChanges InventoryChange[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([supplierId])
+}
+
+/// FR-013–018. Id is a client-generated UUID so offline replays are idempotent.
+model Sale {
+  id             String        @id @db.Uuid
+  occurredAt     DateTime
+  recordedAt     DateTime      @default(now())
+  staffId        String
+  staff          User          @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  customerInfo   String?
+  /// Centavos, before discount.
+  subtotal       Int
+  discountType   DiscountType?
+  /// AMOUNT: centavos. PERCENT: basis points (12.5% = 1250).
+  discountValue  Int?
+  /// Centavos actually taken off.
+  discountAmount Int           @default(0)
+  /// Centavos, subtotal - discountAmount.
+  total          Int
+  paymentMethod  PaymentMethod
+
+  items            SaleItem[]
+  refunds          Refund[]
+  inventoryChanges InventoryChange[]
+
+  @@index([occurredAt])
+  @@index([staffId])
+}
+
+/// One line of a sale. Product name/code are copied so history survives deletion (A2).
+model SaleItem {
+  id               String   @id @default(cuid())
+  saleId           String   @db.Uuid
+  sale             Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId        String?
+  product          Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName      String
+  productCode      String
+  quantity         Int
+  /// Centavos, selling price at time of sale.
+  unitPrice        Int
+  /// Centavos, purchase price at time of sale; null if the product had no cost yet.
+  unitCost         Int?
+  refundedQuantity Int      @default(0)
+
+  refundItems RefundItem[]
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+/// FR-039–040. Dated separately so reports subtract refunds on the refund date.
+model Refund {
+  id         String   @id @db.Uuid
+  saleId     String   @db.Uuid
+  sale       Sale     @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  occurredAt DateTime
+  recordedAt DateTime @default(now())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  /// Centavos returned to the customer.
+  amount     Int
+  note       String?
+
+  items            RefundItem[]
+  inventoryChanges InventoryChange[]
+
+  @@index([occurredAt])
+  @@index([saleId])
+}
+
+model RefundItem {
+  id         String   @id @default(cuid())
+  refundId   String   @db.Uuid
+  refund     Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  saleItemId String
+  saleItem   SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  quantity   Int
+  /// Centavos.
+  amount     Int
+
+  @@index([refundId])
+  @@index([saleItemId])
+}
+
+/// FR-010–012, §5.2. Every stock or product change, with who did it.
+model InventoryChange {
+  id             String              @id @db.Uuid
+  productId      String?
+  product        Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName    String
+  productCode    String
+  type           InventoryChangeType
+  /// Signed: -2 for a sale of two, +10 for a restock, 0 for a detail edit.
+  quantityChange Int
+  stockAfter     Int
+  saleId         String?             @db.Uuid
+  sale           Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  refundId       String?             @db.Uuid
+  refund         Refund?             @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  note           String?
+  occurredAt     DateTime
+  recordedAt     DateTime            @default(now())
+
+  @@index([productId, occurredAt])
+  @@index([occurredAt])
 }
