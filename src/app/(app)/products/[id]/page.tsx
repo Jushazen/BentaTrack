@@ -1,11 +1,12 @@
 // Product details (FR-002, FR-006, FR-009). Leaf 3.2. Purchase price and supplier appear only for
-// the owner (FR-042); only the owner can delete (FR-004).
-import { ArrowLeft, Pencil } from "lucide-react";
+// the owner (FR-042); only the owner can delete (FR-004). Restock and history link: leaf 3.4.
+import { ArrowLeft, History, Pencil } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { buttonClasses } from "@/components/ui/button";
+import { RestockForm } from "@/features/inventory/restock-form";
 import { DeleteProductButton } from "@/features/products/delete-product-button";
 import { NeedsCostBadge, StockStatusBadge } from "@/features/products/product-badges";
 import { ProductImage } from "@/features/products/product-image";
@@ -84,8 +85,20 @@ export default async function ProductDetailPage({ params }: PageProps<"/products
             <Row label="Date added">{addedFormat.format(product.createdAt)}</Row>
           </dl>
 
-          {/* Leaf 3.4 adds Restock and this product's history here. */}
+          {can(user.role, "inventory.restock") && (
+            <RestockForm productId={product.id} productName={product.name} />
+          )}
+
           <div className="flex flex-wrap items-start gap-2">
+            {can(user.role, "inventory.history") && (
+              <Link
+                href={`/inventory-history?product=${product.id}`}
+                className={buttonClasses("secondary")}
+              >
+                <History aria-hidden className="size-4 shrink-0" />
+                <span>View history</span>
+              </Link>
+            )}
             {can(user.role, "products.update") && (
               <Link href={`/products/${product.id}/edit`} className={buttonClasses("primary")}>
                 <Pencil aria-hidden className="size-4 shrink-0" />

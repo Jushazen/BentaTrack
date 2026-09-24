@@ -1,4 +1,4 @@
-// Products (FR-001–006, FR-009). Leaf 3.2.
+// Products (FR-001–006, FR-009). Leaf 3.2. Quick finder with barcode scanning (FR-026–028): leaf 3.5.
 import { Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -6,6 +6,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { listCategoryOptions } from "@/features/categories/queries";
 import { ProductList } from "@/features/products/product-list";
 import { listProducts } from "@/features/products/queries";
+import { ProductFinder } from "@/features/search/product-finder";
 import { requirePageCapability } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 
@@ -32,6 +33,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/product
           </Link>
         )}
       </div>
+      {can(user.role, "search") && <ProductFinder />}
       {products.ok ? (
         <ProductList
           data={products.data}

@@ -196,8 +196,8 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 | 2.3 | src/features/users/\*\*, src/app/(app)/users/\*\*, tests/integration/users/\*\*, tests/e2e/users/\*\* | 2.2, 3.1 | mechanical | 5 | VERIFIED |
 | 3.3 | src/features/categories/\*\*, src/features/suppliers/\*\*, src/app/(app)/categories/\*\*, src/app/(app)/suppliers/\*\*, tests/integration/catalog/\*\*, tests/e2e/catalog/\*\* | 2.2, 3.1 | mechanical | 5 | VERIFIED |
 | 3.2 | src/features/products/\*\*, src/app/(app)/products/\*\*, src/lib/storage.ts, tests/integration/products/\*\*, tests/e2e/products/\*\* | 3.3 | judgment | 6 | VERIFIED |
-| 3.4 | src/features/inventory/\*\*, src/app/(app)/inventory-history/\*\*, tests/integration/inventory/\*\*, tests/e2e/inventory/\*\* | 3.2 | mechanical | 7 | READY |
-| 3.5 | src/features/search/\*\*, src/components/scanner/\*\*, tests/integration/search/\*\*, tests/e2e/search/\*\*, tests/unit/search/\*\* | 3.2 | judgment | 7 | READY |
+| 3.4 | src/features/inventory/\*\*, src/app/(app)/inventory-history/\*\*, tests/integration/inventory/\*\*, tests/e2e/inventory/\*\* | 3.2 | mechanical | 7 | VERIFIED |
+| 3.5 | src/features/search/\*\*, src/components/scanner/\*\*, tests/integration/search/\*\*, tests/e2e/search/\*\*, tests/unit/search/\*\* | 3.2 | judgment | 7 | IN-FLIGHT |
 | 4.1 | src/features/sales/\*\*, src/app/(app)/checkout/\*\*, tests/unit/sales/\*\*, tests/integration/sales/\*\*, tests/e2e/checkout/\*\* | 3.4, 3.5 | judgment | 8 | WAITING |
 | 4.2 | src/features/refunds/\*\*, src/app/(app)/sales/\*\*, tests/integration/refunds/\*\*, tests/e2e/refunds/\*\* | 4.1 | mechanical | 9 | WAITING |
 | 5.1 | src/features/reports/\*\*, src/lib/dates.ts, src/app/(app)/reports/\*\*, src/components/charts/\*\*, tests/unit/reports/\*\*, tests/integration/reports/\*\*, tests/e2e/reports/\*\* | 4.2 | judgment | 10 | WAITING |
