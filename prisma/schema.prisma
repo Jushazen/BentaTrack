@@ -1,0 +1,11 @@
+// BentaTrack data model. Models are added in leaf 2.1 (see .unlazy/bentatrack/PLAN.md)
+// following SRS §6.1 as amended by docs/SRS-V2-amendments.md section C.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

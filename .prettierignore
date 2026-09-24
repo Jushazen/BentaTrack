@@ -1,0 +1,11 @@
+.claude
+.unlazy
+.next
+node_modules
+src/generated
+public/sw.js
+docs
+package-lock.json
+playwright-report
+test-results
+*.md
