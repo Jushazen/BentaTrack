@@ -62,6 +62,21 @@ test.describe("role access", () => {
   });
 });
 
+test.describe("login before the page's JavaScript runs", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("[NFR-SEC-1] a native form submit never puts the password in the URL", async ({ page }) => {
+    const password = "Leaky-Pass-123";
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(E2E_USERS.staff.email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Log in" }).click();
+    await page.waitForLoadState();
+    expect(page.url()).not.toContain(password);
+    expect(page.url()).not.toContain("password=");
+  });
+});
+
 test.describe("signed-out visitors", () => {
   test("[NFR-SEC-1] every app page sends a signed-out visitor to login", async ({ page }) => {
     for (const path of ["/", "/dashboard", "/checkout", "/products", "/users", "/reports"]) {

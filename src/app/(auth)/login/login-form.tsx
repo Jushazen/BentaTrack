@@ -35,7 +35,9 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-8 space-y-5" noValidate>
+    // method="post": if the form is submitted before hydration (slow network, blocked JS), the
+    // browser's fallback submit must not put the password in the URL, history, or server logs.
+    <form method="post" onSubmit={onSubmit} className="mt-8 space-y-5" noValidate>
       <div className="space-y-1.5">
         <label htmlFor="email" className="text-text block text-sm font-medium">
           Email
