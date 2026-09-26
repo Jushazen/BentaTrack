@@ -29,5 +29,5 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
   EXPECT: /\d+ passed/
   EVIDENCE: automatic-evidence=v1; definition-sha256=7ce48e19e1b26a3799347f24c60626cfc78087636ceedb617fe004283c250e18; exit=0; EXPECT=matched; output-sha256=f169cc877502ed8d4b732d83b4f5ac7e5350932a3fea2da93380cf12c91603e3; output-bytes=10129; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
 
-- [ ] N5: the children's manual gates were reviewed at branch level
-  EVIDENCE: pending
+- [x] N5: the children's manual gates were reviewed at branch level
+  EVIDENCE: 2026-09-26: leaf-3.1:G2 approved by team leader 2026-09-24 (docs/design/3.1/ screenshots, desktop+phone, light+dark); leaf-3.5:G4 user (Jushazen) confirmed iPhone camera barcode scanning working 2026-09-26 (after login-form method=post and DEV_ALLOWED_ORIGINS fixes), earlier phone-camera confirmation 2026-09-24; Android device not separately named
