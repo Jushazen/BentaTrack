@@ -194,6 +194,80 @@ test("[FR-050] [OFFLINE-CATALOG] after one online login, checkout reloads and fi
   await context.setOffline(false);
 });
 
+/** Follows one of the app's own menu links (the phone tab bar keeps some behind "More"). */
+async function followMenuLink(page: Page, label: string, info: TestInfo) {
+  const link = page.getByRole("link", { name: label, exact: true }).locator("visible=true");
+  if (info.project.name === "phone" && (await link.count()) === 0) {
+    await page.getByRole("button", { name: "More" }).click();
+    await expect(page.getByRole("dialog", { name: "More pages" })).toBeVisible();
+  }
+  await link.first().click();
+}
+
+const MENU_PAGES = [
+  { path: "/checkout", link: "Checkout", heading: "Checkout" },
+  { path: "/sales", link: "Sales", heading: "Sales" },
+  { path: "/inventory-history", link: "Inventory history", heading: "Inventory history" },
+  { path: "/reports", link: "Reports", heading: "Sales reports" },
+];
+
+test("[FR-050] [OFFLINE-LINKS] pages opened through the app's links open again offline, by link or address", async ({
+  page,
+  context,
+}, info) => {
+  await logInAs(page, "owner");
+  await expect.poll(() => controllingWorker(page), { timeout: 30_000 }).not.toBeNull();
+  for (const { path, link, heading } of MENU_PAGES) {
+    await followMenuLink(page, link, info);
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+  }
+  await waitUntilOfflineReady(
+    page,
+    MENU_PAGES.map((p) => p.path),
+  );
+
+  await context.setOffline(true);
+  await expectNetworkCut(page);
+
+  // Back and forth through the menu, as reported on an iPhone (Checkout → Sales → Checkout …).
+  for (const { path, link, heading } of [...MENU_PAGES, ...MENU_PAGES]) {
+    await followMenuLink(page, link, info);
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "You are offline" })).toHaveCount(0);
+  }
+  for (const { path, heading } of MENU_PAGES) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+  }
+
+  await context.setOffline(false);
+});
+
+test("[FR-050] [OFFLINE-VARY] a saved page is served offline whatever headers the browser sends for it", async ({
+  page,
+  context,
+}) => {
+  await logInAs(page, "staff");
+  await waitUntilOfflineReady(page, ["/checkout"]);
+  await context.setOffline(true);
+  await expectNetworkCut(page);
+
+  // Next.js marks pages `Vary: Next-Router-State-Tree, …, Accept-Encoding`. Safari's own page
+  // requests don't match a page saved ahead of time on those headers; a request that differs on
+  // one must still get the saved page.
+  const outcome = await page.evaluate(() =>
+    fetch("/checkout", { headers: { "Next-Router-State-Tree": "differs" } }).then(
+      async (response) => `${response.status} ${(await response.text()).includes("Checkout")}`,
+      () => "failed",
+    ),
+  );
+  expect(outcome).toBe("200 true");
+
+  await context.setOffline(false);
+});
+
 test("[OFFLINE-USER-SWITCH] signing in as someone else clears the previous user's saved pages", async ({
   page,
   context,

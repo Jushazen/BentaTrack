@@ -3,7 +3,14 @@
 // served at /serwist/sw.js. Precaches the build's static files and the /offline page, keeps a
 // network-first copy of every page visited, and shows /offline for pages it never saw.
 import { defaultCache, PAGES_CACHE_NAME } from "@serwist/turbopack/worker";
-import { NetworkOnly, Serwist, type PrecacheEntry, type SerwistGlobalConfig } from "serwist";
+import {
+  ExpirationPlugin,
+  NetworkFirst,
+  NetworkOnly,
+  Serwist,
+  type PrecacheEntry,
+  type SerwistGlobalConfig,
+} from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -64,6 +71,30 @@ const serwist = new Serwist({
       matcher: ({ sameOrigin, url }) =>
         sameOrigin && (url.pathname === "/api/catalog" || url.pathname.startsWith("/api/sync")),
       handler: new NetworkOnly(),
+    },
+    // Whole pages: opened in the browser, or saved ahead by a CACHE_URLS message (a plain GET).
+    // Both land in one cache, looked up by address alone. Next.js marks pages `Vary: RSC,
+    // Next-Router-State-Tree, …, Accept-Encoding`; honouring that, Safari never matched a page
+    // saved ahead with the request it makes when the page is opened, and showed /offline for
+    // every page. Only whole pages are kept here (RSC payloads have their own caches), so
+    // ignoring Vary can't serve the wrong kind of reply.
+    {
+      matcher: ({ request, sameOrigin, url: { pathname } }) =>
+        sameOrigin &&
+        request.method === "GET" &&
+        request.headers.get("RSC") !== "1" &&
+        !pathname.startsWith("/api/") &&
+        !pathname.startsWith("/_next/") &&
+        // Page addresses have no file extension; icons, the manifest, and scripts do.
+        !/\.[a-z0-9]+$/i.test(pathname),
+      handler: new NetworkFirst({
+        cacheName: PAGES_CACHE_NAME.html,
+        matchOptions: { ignoreVary: true },
+        plugins: [
+          // A shop may stay offline for days; a page is re-saved whenever it's opened online.
+          new ExpirationPlugin({ maxEntries: 64, maxAgeSeconds: 7 * 24 * 60 * 60 }),
+        ],
+      }),
     },
     ...defaultCache,
   ],
