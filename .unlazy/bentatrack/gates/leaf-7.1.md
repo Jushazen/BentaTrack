@@ -25,7 +25,7 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
 - [x] G2: dashboard and product pages load under 1 s on a throttled phone over 4G, and under 2 s over weak 4G, with the demo dataset
   CHECK: node scripts/gates/require-tests.mjs playwright --ids NFR-PERF-1 tests/perf
   EXPECT: REQUIRED TESTS PASSED
-  EVIDENCE: automatic-evidence=v1; definition-sha256=891cef394a417c6ce8dc2c7779dca68904880985d818a1e322a38d4f08bf7774; exit=0; EXPECT=matched; output-sha256=542f5373cb485485ff97c0f3c3dd1e82603db3841b40bf8ab36262640699101a; output-bytes=39; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=891cef394a417c6ce8dc2c7779dca68904880985d818a1e322a38d4f08bf7774; exit=0; EXPECT=matched; output-sha256=30fd8a8f007c4659c3f2830370c0216d039553f8256051c49903d37f20c90a21; output-bytes=39; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
 
-- [ ] G3: on a real phone, offline use feels as fast as online use (§5.1 bullet 4)
-  EVIDENCE: pending
+- [x] G3: on a real phone, offline use feels as fast as online use (§5.1 bullet 4)
+  EVIDENCE: manual review 2026-09-27: user (Jushazen) confirmed on a real phone that pages are faster after rev 3 and offline use works; specific device not stated
