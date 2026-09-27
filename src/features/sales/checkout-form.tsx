@@ -3,7 +3,8 @@
 // Checkout (FR-013–019, Figure 1): find products by name, code, scanner, or phone camera; set
 // quantities; apply a whole-sale discount; choose Cash or GCash; and record the sale. The command
 // id is kept until the sale succeeds, so pressing "Complete sale" again after a dropped
-// connection can't record it twice. Any change to the cart starts a new sale id.
+// connection can't record it twice. Any change to the cart starts a new sale id. Offline, the
+// sale is saved on this device and syncs later (FR-034, leaf 6.2).
 import { CheckCircle2, ShoppingCart, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -17,7 +18,7 @@ import { useResultAction } from "@/components/ui/use-result-action";
 import { findProduct, ProductSearch } from "@/features/search/product-search";
 import type { SearchHit } from "@/features/search/queries";
 import { formatPeso } from "@/lib/money";
-import { recordSale } from "./actions";
+import { runCommand } from "@/lib/offline/sync";
 import {
   addToCart,
   lineKey,
@@ -192,7 +193,7 @@ export function CheckoutForm() {
     const id = commandId.current;
     run(
       () =>
-        recordSale({
+        runCommand("SALE", {
           id,
           occurredAt: new Date().toISOString(),
           items: lines.map((line) => ({
@@ -206,9 +207,12 @@ export function CheckoutForm() {
         }),
       {
         success: (sale) =>
-          `Sale recorded: ${formatPeso(sale.total)} by ${PAYMENT_LABEL[sale.paymentMethod]}.`,
+          sale.queued
+            ? `Sale saved on this device: ${formatPeso(totals?.total ?? 0)} by ${PAYMENT_LABEL[paymentMethod]}. It will sync when you're back online.`
+            : `Sale recorded: ${formatPeso(sale.total)} by ${PAYMENT_LABEL[sale.paymentMethod]}.`,
         onSuccess: (sale) => {
           reset();
+          if (sale.queued) return;
           showLowStockAlerts(sale.lowStockAlerts, (productId) =>
             router.push(`/products/${productId}`),
           );

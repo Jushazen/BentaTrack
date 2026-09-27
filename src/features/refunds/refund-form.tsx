@@ -3,7 +3,8 @@
 // FR-039/040: refund all or part of a sale. Each line takes a quantity up to what's still
 // refundable, and the money to return is previewed with the same rule the server uses. The
 // command id is kept until the refund succeeds, so pressing "Yes, refund" again after a dropped
-// connection can't refund twice.
+// connection can't refund twice. Offline, the refund is saved on this device and syncs later
+// (FR-034, leaf 6.2).
 import { ListChecks, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -12,7 +13,7 @@ import { ConfirmButton } from "@/components/ui/confirm-button";
 import { inputClasses, TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
 import { formatPeso } from "@/lib/money";
-import { refundSale } from "./actions";
+import { runCommand } from "@/lib/offline/sync";
 import type { SaleLine } from "./queries";
 import { refundAmounts } from "./refund-math";
 import { MAX_REFUND_NOTE, refundLineKey } from "./schemas";
@@ -77,7 +78,7 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
     const id = commandId.current;
     run(
       () =>
-        refundSale({
+        runCommand("REFUND", {
           id,
           occurredAt: new Date().toISOString(),
           saleId,
@@ -86,13 +87,15 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
         }),
       {
         success: (result) =>
-          `Refunded ${formatPeso(result.amount)}. Give this back to the customer.`,
-        onSuccess: () => {
+          result.queued
+            ? `Refund of ${formatPeso(amount)} saved on this device. Give this back to the customer. It will sync when you're back online.`
+            : `Refunded ${formatPeso(result.amount)}. Give this back to the customer.`,
+        onSuccess: (result) => {
           commandId.current = null;
           setQuantities({});
           setNote("");
           clearErrors();
-          router.refresh();
+          if (!result.queued) router.refresh();
         },
       },
     );

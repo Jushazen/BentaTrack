@@ -2,13 +2,14 @@
 
 // FR-038: record units received for one product. The command id is kept until the restock
 // succeeds, so pressing "Restock" again after a dropped connection can't add the stock twice.
+// Offline, the restock is saved on this device and syncs later (FR-034, leaf 6.2).
 import { PackagePlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
-import { restockProduct } from "./actions";
+import { runCommand } from "@/lib/offline/sync";
 import { MAX_RESTOCK_QUANTITY } from "./schemas";
 
 export function RestockForm({
@@ -31,7 +32,7 @@ export function RestockForm({
     const id = commandId.current;
     run(
       () =>
-        restockProduct({
+        runCommand("RESTOCK", {
           id,
           occurredAt: new Date().toISOString(),
           productId,
@@ -41,11 +42,13 @@ export function RestockForm({
         }),
       {
         success: (result) =>
-          `Added ${result.quantity} to ${result.productName}. ${result.stockAfter} in stock now.`,
-        onSuccess: () => {
+          result.queued
+            ? `Restock of ${quantityText} saved on this device. It will sync when you're back online.`
+            : `Added ${result.quantity} to ${result.productName}. ${result.stockAfter} in stock now.`,
+        onSuccess: (result) => {
           commandId.current = null;
           form.reset();
-          router.refresh();
+          if (!result.queued) router.refresh();
         },
       },
     );

@@ -166,10 +166,13 @@ function MoreSheet({
 export function AppShell({
   user,
   lowStockCount,
+  status,
   children,
 }: {
   user: ShellUser;
   lowStockCount: number;
+  /** Shown at the right of the top bar: the online/offline and sync indicator (leaf 6.2). */
+  status?: ReactNode;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -214,8 +217,9 @@ export function AppShell({
             </span>
             {label}
           </p>
-          {/* Leaf 6.2 puts the online/offline indicator here. */}
-          <div id="shell-status" className="ml-auto" />
+          <div id="shell-status" className="ml-auto">
+            {status}
+          </div>
         </header>
 
         <main className="flex-1 px-4 pt-6 pb-28 lg:px-8 lg:pb-10">{children}</main>

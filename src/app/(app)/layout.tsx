@@ -3,6 +3,7 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { LowStockOnOpen } from "@/components/layout/low-stock-alerts";
 import { OfflineCatalogSync } from "@/components/offline/offline-catalog-sync";
+import { SyncStatus } from "@/components/sync/sync-status";
 import { requirePageCapability } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -17,7 +18,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requirePageCapability();
   const count = await lowStockCount();
   return (
-    <AppShell user={{ name: user.name, role: user.role }} lowStockCount={count}>
+    <AppShell
+      user={{ name: user.name, role: user.role }}
+      lowStockCount={count}
+      status={<SyncStatus user={{ id: user.id, name: user.name }} />}
+    >
       {children}
       <LowStockOnOpen count={count} />
       <OfflineCatalogSync />
