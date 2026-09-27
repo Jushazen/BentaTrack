@@ -1,2 +1,3 @@
-// Server actions (mutations): Sales reports and dashboard data (FR-021–025, FR-047). Leaf 5.1.
+// Server actions (mutations): Sales reports. Leaf 5.1. Reports are read-only (see queries.ts) and
+// can't be exported (FR-048), so there are no actions here.
 export {};
