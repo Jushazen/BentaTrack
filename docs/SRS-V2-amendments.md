@@ -232,7 +232,7 @@ Also update the §6.1 intro from "four main tables" to "nine tables: Product, Ca
 
 ### D4. EDIT: Make performance targets measurable (§5.1)
 - "almost instantly" → "within 500 ms for a catalog of up to 5,000 products".
-- "load in under 2 seconds under normal conditions" → add "measured on a mid-range phone over a 4G connection after first visit".
+- "load in under 2 seconds under normal conditions" → "load in under 1 second, measured on a mid-range phone over a 4G connection after first visit, and in under 2 seconds on a weak 4G signal". (Tightened from 2 seconds by the team leader, 2026-09-27.)
 
 ### D5. EDIT: Secure connection (§3.4)
 - Bullets 1 and 3: specify "HTTPS (TLS)". Vercel provides this automatically.

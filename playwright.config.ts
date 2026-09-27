@@ -16,8 +16,10 @@ export default defineConfig({
   fullyParallel: false,
   use: { baseURL: BASE_URL },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "phone", use: { ...devices["Pixel 7"] } },
+    { name: "desktop", testDir: "tests/e2e", use: { ...devices["Desktop Chrome"] } },
+    { name: "phone", testDir: "tests/e2e", use: { ...devices["Pixel 7"] } },
+    // Page-load timing (NFR-PERF-1) on a throttled mid-range phone; see tests/perf.
+    { name: "perf", testDir: "tests/perf", use: { ...devices["Pixel 7"] } },
   ],
   webServer: {
     command: `npm run build && npx next start -p ${PORT}`,

@@ -32,4 +32,4 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
 - [x] G3: in the browser, login routes by role and protected pages reject the wrong role or no session
   CHECK: node scripts/gates/require-tests.mjs playwright --ids FR-030,FR-033,NFR-SEC-1 tests/e2e/auth
   EXPECT: REQUIRED TESTS PASSED
-  EVIDENCE: automatic-evidence=v1; definition-sha256=4712463776169bfa0de0df0d7dcdac68c6ab0047db4dab4320c833a5337d69d1; exit=0; EXPECT=matched; output-sha256=8b1def247443cb65adca21ea90ed861a085d3f3ef172429cb9deb337e5757ba9; output-bytes=40; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=4712463776169bfa0de0df0d7dcdac68c6ab0047db4dab4320c833a5337d69d1; exit=0; EXPECT=matched; output-sha256=3410122b08967ad822521bf6fbf29d4c679416b89d40ebf0d572402e141d4436; output-bytes=40; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=4975bd8b17bb/56 entries

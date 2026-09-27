@@ -47,7 +47,7 @@ See `CLAUDE.md` "Coding conventions". Manual gates are reviewed by the team lead
 
 ## Current contract inventory
 
-Contract revision: 2 (SRS V2 + amendments of 2026-09-24; rev 2: email login, NextAuth v4, Refund tables confirmed).
+Contract revision: 3 (SRS V2 + amendments of 2026-09-24; rev 2: email login, NextAuth v4, Refund tables confirmed; rev 3: page loads < 1 s on 4G, < 2 s on weak 4G).
 
 | ID | Required outcome or constraint | Owner | Observing gate or manual review | Disposition | Revision |
 |---|---|---|---|---|---|
@@ -105,7 +105,7 @@ Contract revision: 2 (SRS V2 + amendments of 2026-09-24; rev 2: email login, Nex
 | C52 | FR-051 online/offline indicator and pending count | 6.2 | leaf-6.2:G2 | ACTIVE | 1 |
 | C53 | §3.4 user told when sync completes or fails | 6.2 | leaf-6.2:G2 (SYNC-NOTIFY) | ACTIVE | 1 |
 | C54 | §3.4 secure, encrypted transport (HTTPS/TLS, D5) | 7.2 | leaf-7.2:G2 | OWNER_DECISION | 1 |
-| C55 | §5.1 dashboard and product pages load < 2 s (D4) | 7.1 | leaf-7.1:G2 | ACTIVE | 1 |
+| C55 | §5.1 dashboard and product pages load < 1 s on 4G, < 2 s on weak 4G (D4, rev 3) | 7.1 | leaf-7.1:G2 | ACTIVE | 3 |
 | C56 | §5.1 search < 500 ms at 5,000 products (D4) | 3.5 | leaf-3.5:G1 | ACTIVE | 1 |
 | C57 | §5.1 stock updates immediately after a sale | 4.1 | leaf-4.1:G2 | ACTIVE | 1 |
 | C58 | §5.1 performance consistent online and offline | 7.1 | leaf-7.1:G3 (manual, device) | ACTIVE | 1 |
@@ -204,7 +204,7 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 | 5.2 | src/features/dashboard/\*\*, src/app/(app)/dashboard/\*\*, tests/integration/dashboard/\*\*, tests/e2e/dashboard/\*\* | 5.1 | mechanical | 11 | VERIFIED |
 | 6.1 | next.config.ts, src/app/sw.ts, src/app/manifest.ts, src/app/offline/\*\*, src/app/serwist/\*\*, src/lib/offline/db.ts, src/lib/offline/catalog.ts, public/icons/\*\*, tests/unit/offline/\*\*, tests/e2e/offline/\*\*, src/app/api/catalog/\*\*, src/components/offline/\*\*; amended edits: src/app/layout.tsx, src/app/(app)/layout.tsx, src/features/search/queries.ts, src/features/search/product-search.tsx, src/features/search/product-finder.tsx, src/features/sales/checkout-form.tsx | 3.5 | judgment | 8 | VERIFIED |
 | 6.2 | src/lib/offline/outbox.ts, src/lib/offline/sync.ts, src/lib/commands.ts, src/app/api/sync/\*\*, src/components/sync/\*\*, tests/unit/sync/\*\*, tests/integration/sync/\*\*, tests/e2e/sync/\*\* | 6.1, 4.2 | judgment | 10 | VERIFIED |
-| 7.1 | tests/e2e/flows/\*\*, tests/perf/\*\*, prisma/seed-demo.ts, scripts/gates/perf/\*\* | 2.3, 5.2, 6.2 | judgment | 12 | READY |
+| 7.1 | tests/e2e/flows/\*\*, tests/perf/\*\*, prisma/seed-demo.ts, scripts/gates/perf/\*\*; amended edits: playwright.config.ts, src/features/products/queries.ts (page size) | 2.3, 5.2, 6.2 | judgment | 12 | IN-FLIGHT |
 | 7.2 | docs/DEPLOY.md, src/app/api/health/\*\*, scripts/gates/check-deploy.mjs, tests/integration/health/\*\*, vercel.json | 7.1 | judgment | 13 | WAITING |
 
 **Recommended sequential order:** 1.1 → 2.1 → 2.2 → 3.1 → 2.3 → 3.3 → 3.2 → 3.4 → 3.5 → 4.1 → 4.2 → 5.1 → 5.2 → 6.1 → 6.2 → 7.1 → 7.2. Close each branch's `node-*.md` ledger when its last child is VERIFIED.
