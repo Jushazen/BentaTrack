@@ -24,6 +24,9 @@ export type SearchHit = {
 
 type Row = Omit<SearchHit, "status"> & { lowStockThreshold: number };
 
+/** One product in the offline catalog snapshot (leaf 6.1). Status is computed on the device. */
+export type CatalogEntry = Row;
+
 function toHit({ lowStockThreshold, ...row }: Row): SearchHit {
   return { ...row, status: stockStatus(row.stockQuantity, lowStockThreshold) };
 }
@@ -86,4 +89,20 @@ export async function lookupProduct(rawCode: unknown): Promise<Result<SearchHit 
     order by case when lower(p.barcode) = lower(${code}) then 0 else 1 end
     limit 1`;
   return ok(rows[0] ? toHit(rows[0]) : null);
+}
+
+/**
+ * Every product with the fields search needs, for the device's offline catalog (§4.9, leaf 6.1).
+ * No purchase prices or suppliers, so staff devices can hold it (FR-032).
+ */
+export async function catalogSnapshot(): Promise<Result<CatalogEntry[]>> {
+  const auth = await requireCapability("search");
+  if (!auth.ok) return auth;
+  const rows = await db.$queryRaw<Row[]>`
+    select p.id, p.name, p.code, p.barcode, p.brand, c.name as "categoryName",
+           p."sellingPrice", p."stockQuantity", p."lowStockThreshold", p."imageUrl"
+    from "Product" p
+    join "Category" c on c.id = p."categoryId"
+    order by p.name, p.code`;
+  return ok(rows);
 }

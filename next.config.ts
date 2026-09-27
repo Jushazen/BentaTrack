@@ -1,3 +1,4 @@
+import { withSerwist } from "@serwist/turbopack";
 import type { NextConfig } from "next";
 
 // Extra hostnames (comma-separated, no scheme or port) allowed to load the dev server, e.g. a
@@ -15,4 +16,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Serwist (leaf 6.1): the service worker is bundled by src/app/serwist/[path]/route.ts, which
+// needs esbuild kept out of the server bundle.
+export default withSerwist(nextConfig);

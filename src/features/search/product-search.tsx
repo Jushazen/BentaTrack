@@ -2,17 +2,44 @@
 
 // Live product search box (FR-026–028). Type a name or code to see matches; Enter on a typed or
 // scanner-typed barcode or code opens that product straight away. Reused by checkout (leaf 4.1)
-// through `onPick`.
+// through `onPick`. Without a connection it searches the device's offline catalog (leaf 6.1).
 import { Search } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 import { inputClasses } from "@/components/ui/field";
 import { StockStatusBadge } from "@/features/products/product-badges";
 import { formatPeso } from "@/lib/money";
+import { lookupCatalog, searchCatalog } from "@/lib/offline/catalog";
+import { ok, type Result } from "@/lib/result";
 import { lookupProductAction, searchProductsAction } from "./actions";
 import type { SearchHit } from "./queries";
 
 const DEBOUNCE_MS = 150;
+
+/** Live search on the server, or in the offline catalog when the server can't be reached. */
+export async function findProducts(query: string): Promise<SearchHit[]> {
+  if (navigator.onLine) {
+    try {
+      const result = await searchProductsAction(query);
+      return result.ok ? result.data : [];
+    } catch {
+      // Fall through to the offline catalog.
+    }
+  }
+  return searchCatalog(query);
+}
+
+/** Exact barcode/code lookup on the server, or in the offline catalog without a connection. */
+export async function findProduct(code: string): Promise<Result<SearchHit | null>> {
+  if (navigator.onLine) {
+    try {
+      return await lookupProductAction(code);
+    } catch {
+      // Fall through to the offline catalog.
+    }
+  }
+  return ok(await lookupCatalog(code));
+}
 
 type ProductSearchProps = {
   onPick: (hit: SearchHit) => void;
@@ -47,13 +74,13 @@ export function ProductSearch({
     if (!q) return;
     const timer = setTimeout(async () => {
       try {
-        const result = await searchProductsAction(q);
+        const hits = await findProducts(q);
         if (request !== latest.current) return;
-        setResults(result.ok ? result.data : []);
+        setResults(hits);
         setSearched(q);
         setActive(-1);
       } catch {
-        // Offline or the server is unreachable: keep the last results.
+        // Neither the server nor the offline catalog answered: keep the last results.
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -78,7 +105,7 @@ export function ProductSearch({
     if (!q || looking) return;
     setLooking(true);
     try {
-      const found = await lookupProductAction(q);
+      const found = await findProduct(q);
       if (!found.ok) {
         toast.error(found.error.message);
         return;

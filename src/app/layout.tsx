@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Gloock, Inter } from "next/font/google";
 import { Providers } from "@/components/layout/providers";
+import { ServiceWorkerProvider } from "@/components/offline/service-worker-provider";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
@@ -9,6 +10,9 @@ const gloock = Gloock({ variable: "--font-gloock", subsets: ["latin"], weight: "
 export const metadata: Metadata = {
   title: "BentaTrack",
   description: "Inventory and sales management for Estetika",
+  applicationName: "BentaTrack",
+  appleWebApp: { capable: true, title: "BentaTrack", statusBarStyle: "default" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
@@ -27,7 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${inter.variable} ${gloock.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <Providers>{children}</Providers>
+        <ServiceWorkerProvider>
+          <Providers>{children}</Providers>
+        </ServiceWorkerProvider>
       </body>
     </html>
   );

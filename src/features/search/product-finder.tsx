@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CameraScanButton } from "@/components/scanner/camera-scanner";
 import { useBarcodeWedge } from "@/components/scanner/use-barcode-wedge";
-import { lookupProductAction } from "./actions";
-import { ProductSearch } from "./product-search";
+import { findProduct, ProductSearch } from "./product-search";
 import type { SearchHit } from "./queries";
 
 export function ProductFinder() {
@@ -19,7 +18,7 @@ export function ProductFinder() {
 
   async function openScanned(code: string) {
     try {
-      const found = await lookupProductAction(code);
+      const found = await findProduct(code);
       if (!found.ok) toast.error(found.error.message);
       else if (found.data) open(found.data);
       else toast.error(`No product has the barcode “${code}”.`);

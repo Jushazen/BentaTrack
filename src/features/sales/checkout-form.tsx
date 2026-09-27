@@ -14,8 +14,7 @@ import { useBarcodeWedge } from "@/components/scanner/use-barcode-wedge";
 import { Button } from "@/components/ui/button";
 import { inputClasses, TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
-import { lookupProductAction } from "@/features/search/actions";
-import { ProductSearch } from "@/features/search/product-search";
+import { findProduct, ProductSearch } from "@/features/search/product-search";
 import type { SearchHit } from "@/features/search/queries";
 import { formatPeso } from "@/lib/money";
 import { recordSale } from "./actions";
@@ -144,7 +143,7 @@ export function CheckoutForm() {
 
   async function addScanned(code: string) {
     try {
-      const found = await lookupProductAction(code);
+      const found = await findProduct(code);
       if (!found.ok) toast.error(found.error.message);
       else if (found.data) add(found.data);
       else toast.error(`No product has the barcode “${code}”.`);
