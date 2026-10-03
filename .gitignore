@@ -67,3 +67,6 @@ unlazy-status.log
 
 # local product images when Vercel Blob is not configured (src/lib/storage.ts)
 /.uploads
+
+# vitest local results cache
+/.vitest
