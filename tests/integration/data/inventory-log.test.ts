@@ -47,7 +47,7 @@ test("[FR-011] each change records the product, the user, the amount, and the st
     });
     return recordInventoryChange(tx, {
       productId: product.id,
-      type: "REMOVAL",
+      type: "EDIT",
       quantityChange: -3,
       userId: user.id,
       occurredAt: new Date(),
@@ -58,7 +58,7 @@ test("[FR-011] each change records the product, the user, the amount, and the st
     productId: product.id,
     productName: "Silk Scarf",
     productCode: "ACC-7",
-    type: "REMOVAL",
+    type: "EDIT",
     quantityChange: -3,
     stockAfter: 1,
     userId: user.id,

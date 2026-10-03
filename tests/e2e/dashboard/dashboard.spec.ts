@@ -27,7 +27,11 @@ function peso(centavos: number): string {
   return `${sign}₱${amount}`;
 }
 
-/** Manila midnight today as a UTC instant (Manila is UTC+8 all year). */
+/**
+ * Manila midnight today as a UTC instant (Manila is UTC+8 all year). Pass it to queries as an ISO
+ * string: node-pg sends a Date as local time with an offset, which a timestamp (without time zone)
+ * column drops.
+ */
 function manilaMidnight(): Date {
   const day = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   return new Date(`${day}T00:00:00+08:00`);
@@ -87,7 +91,8 @@ test("[FR-023] the owner sees product and stock totals and what is low on stock"
   const db = await withTestDb(async (client) => {
     const { rows } = await client.query<{ products: string; units: string; out: string }>(
       `select count(*) as products, coalesce(sum("stockQuantity"), 0) as units,
-              count(*) filter (where "stockQuantity" <= 0) as out from "Product"`,
+              count(*) filter (where "stockQuantity" <= 0) as out from "Product"
+       where "archivedAt" is null`,
     );
     return rows[0];
   });
@@ -144,12 +149,12 @@ test("[FR-025] today's sales summary matches today's sales and refunds", async (
     const sales = await client.query<{ total: string; count: string }>(
       `select coalesce(sum(total), 0) as total, count(*) as count from "Sale"
        where "occurredAt" >= $1 and "occurredAt" < $2`,
-      [start, end],
+      [start.toISOString(), end.toISOString()],
     );
     const refunds = await client.query<{ total: string }>(
       `select coalesce(sum(amount), 0) as total from "Refund"
        where "occurredAt" >= $1 and "occurredAt" < $2`,
-      [start, end],
+      [start.toISOString(), end.toISOString()],
     );
     return {
       net: Number(sales.rows[0].total) - Number(refunds.rows[0].total),

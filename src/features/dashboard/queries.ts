@@ -68,7 +68,12 @@ export type OwnerDashboard = CommonDashboard & {
 
 export type Dashboard = StaffDashboard | OwnerDashboard;
 
-const lowStockWhere = { stockQuantity: { lte: db.product.fields.lowStockThreshold } };
+// Stock figures cover products in use only; archived ones are left out (FR-057).
+const inUse = { archivedAt: null };
+const lowStockWhere = {
+  ...inUse,
+  stockQuantity: { lte: db.product.fields.lowStockThreshold },
+};
 
 /** Sales and refunds in `range`, shaped for the report arithmetic. Costs only when asked. */
 async function salesFigures(range: DateRange, withCosts: boolean) {
@@ -197,11 +202,15 @@ export async function getDashboard(now: Date = new Date()): Promise<Result<Dashb
 
   const monthRange = periodRange("month", now);
   const [stock, outOfStockCount, needsCostCount, needsCostRows, monthFigures] = await Promise.all([
-    db.product.aggregate({ _count: { _all: true }, _sum: { stockQuantity: true } }),
-    db.product.count({ where: { stockQuantity: { lte: 0 } } }),
-    db.product.count({ where: { purchasePrice: null } }),
+    db.product.aggregate({
+      where: inUse,
+      _count: { _all: true },
+      _sum: { stockQuantity: true },
+    }),
+    db.product.count({ where: { ...inUse, stockQuantity: { lte: 0 } } }),
+    db.product.count({ where: { ...inUse, purchasePrice: null } }),
     db.product.findMany({
-      where: { purchasePrice: null },
+      where: { ...inUse, purchasePrice: null },
       select: { id: true, name: true, code: true },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       take: NEEDS_COST_LIMIT,

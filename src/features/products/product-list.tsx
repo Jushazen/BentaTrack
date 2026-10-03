@@ -1,11 +1,12 @@
-// Product list with filters (FR-006, FR-009). Server component: the filter form is a plain GET
+// Product list with filters (FR-006, FR-009, FR-057: archived products only under the owner's
+// Archived filter). Server component: the filter form is a plain GET
 // form, so it works before JavaScript loads. One row layout for every screen size: a card on
 // phones that lines up into columns on wider screens.
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
 import { formatPeso } from "@/lib/money";
-import { NeedsCostBadge, StockStatusBadge } from "./product-badges";
+import { ArchivedBadge, NeedsCostBadge, StockStatusBadge } from "./product-badges";
 import { ProductImage } from "./product-image";
 import type { ProductListItem, ProductPage } from "./queries";
 
@@ -21,6 +22,7 @@ function pageHref(filters: ProductPage["filters"], page: number): string {
   if (filters.category) params.set("category", filters.category);
   if (filters.stock) params.set("stock", filters.stock);
   if (filters.cost) params.set("cost", filters.cost);
+  if (filters.archived) params.set("archived", filters.archived);
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
   return query ? `/products?${query}` : "/products";
@@ -30,10 +32,12 @@ function Filters({
   filters,
   categories,
   showCostFilter,
+  showArchivedFilter,
 }: {
   filters: ProductPage["filters"];
   categories: Option[];
   showCostFilter: boolean;
+  showArchivedFilter: boolean;
 }) {
   const label = "text-text block text-sm font-medium";
   return (
@@ -106,6 +110,18 @@ function Filters({
           Only products that need a purchase price
         </label>
       )}
+      {showArchivedFilter && (
+        <label className="text-text flex min-h-11 items-center gap-2 text-sm md:col-span-4">
+          <input
+            type="checkbox"
+            name="archived"
+            value="1"
+            defaultChecked={filters.archived === "1"}
+            className="size-4"
+          />
+          Show archived (discontinued) products instead
+        </label>
+      )}
     </form>
   );
 }
@@ -131,6 +147,7 @@ function ProductRow({ product }: { product: ProductListItem }) {
           </p>
           <p className="text-muted text-sm md:text-right">{product.stockQuantity} in stock</p>
           <p className="flex flex-wrap gap-1.5 md:justify-end">
+            {product.archived && <ArchivedBadge />}
             <StockStatusBadge status={product.status} />
             {product.needsCost && <NeedsCostBadge />}
           </p>
@@ -144,16 +161,25 @@ export function ProductList({
   data,
   categories,
   showCostFilter,
+  showArchivedFilter,
 }: {
   data: ProductPage;
   categories: Option[];
   showCostFilter: boolean;
+  showArchivedFilter: boolean;
 }) {
   const { items, total, page, pageCount, filters } = data;
-  const filtered = Boolean(filters.q || filters.category || filters.stock || filters.cost);
+  const filtered = Boolean(
+    filters.q || filters.category || filters.stock || filters.cost || filters.archived,
+  );
   return (
     <>
-      <Filters filters={filters} categories={categories} showCostFilter={showCostFilter} />
+      <Filters
+        filters={filters}
+        categories={categories}
+        showCostFilter={showCostFilter}
+        showArchivedFilter={showArchivedFilter}
+      />
       <section aria-labelledby="product-list-title" className="bg-surface rounded-lg p-2 lg:p-3">
         <h2 id="product-list-title" className="text-muted px-3 pt-2 pb-1 text-sm">
           {total === 1 ? "1 product" : `${total.toLocaleString("en-PH")} products`}

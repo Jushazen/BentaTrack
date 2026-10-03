@@ -1,5 +1,5 @@
 // Gate oracle: prisma/schema.prisma contains the agreed data model
-// (SRS §6.1 as amended by docs/SRS-V2-amendments.md section C; names fixed in PLAN.md "Contract").
+// (SRS v2.1 §6.1 in docs/SRS_V2.1.docx; names fixed in PLAN.md "Contract").
 // Prints SCHEMA OK only when every model, field, and enum value is present.
 import { readFileSync } from "node:fs";
 
@@ -21,6 +21,7 @@ const MODELS = {
     "lowStockThreshold",
     "expirationDate",
     "imageUrl",
+    "archivedAt",
     "createdAt",
     "updatedAt",
   ],
@@ -68,7 +69,7 @@ const ENUMS = {
   Role: ["OWNER", "STAFF"],
   PaymentMethod: ["CASH", "GCASH"],
   DiscountType: ["AMOUNT", "PERCENT"],
-  InventoryChangeType: ["SALE", "RESTOCK", "EDIT", "REFUND", "REMOVAL"],
+  InventoryChangeType: ["SALE", "RESTOCK", "EDIT", "REFUND", "ARCHIVE", "RESTORE"],
 };
 // Unique constraints required by the SRS (FR-002, FR-044, FR-043).
 const UNIQUE = { Product: ["code", "barcode"], User: ["email"], Category: ["name"] };

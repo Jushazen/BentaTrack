@@ -39,6 +39,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/product
           data={products.data}
           categories={categories.ok ? categories.data : []}
           showCostFilter={can(user.role, "products.cost")}
+          showArchivedFilter={can(user.role, "products.archive")}
         />
       ) : (
         <p role="alert" className="text-danger">

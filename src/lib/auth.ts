@@ -2,6 +2,8 @@
 // Two layers (Next 16 auth guide): src/proxy.ts does fast optimistic redirects from the JWT;
 // getCurrentUser()/requireCapability() re-read the user from the database on every server
 // request, so deactivation and role changes take effect immediately (FR-045, §5.2).
+// Each session also carries the user's sessionVersion from login; raising it in the database
+// (password change or reset) ends every session of that user on every device (FR-060).
 import bcrypt from "bcryptjs";
 import { getServerSession, type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -16,6 +18,15 @@ export const BCRYPT_ROUNDS = 12;
 export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days, so offline phones stay signed in (FR-050)
 
 export type SessionUser = { id: string; email: string; name: string; role: Role };
+
+/** What a successful login puts in the session. */
+export type SignedInUser = SessionUser & { sessionVersion: number };
+
+/** Why a session that still has its cookie no longer counts. */
+export type SessionEndReason = "password" | "deactivated";
+
+/** Spread into a user update to end every session of that user (FR-060, FR-045). */
+export const END_ALL_SESSIONS = { sessionVersion: { increment: 1 } } as const;
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -43,25 +54,53 @@ const DUMMY_HASH = "$2b$12$7idUWVVihCdkVtwaKygHo.pT2d48nWLOvjzUMRvn9xZwz29DBp.hi
 export async function verifyCredentials(
   email: unknown,
   password: unknown,
-): Promise<SessionUser | null> {
+): Promise<SignedInUser | null> {
   if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
     return null;
   }
   const user = await db.user.findUnique({ where: { email: normalizeEmail(email) } });
   const matches = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !matches || !user.active) return null;
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    sessionVersion: user.sessionVersion,
+  };
 }
 
-/** The user behind a session, or null if they no longer exist or were deactivated. */
-export async function loadActiveUser(userId: string | undefined): Promise<SessionUser | null> {
-  if (!userId) return null;
+type SessionCheck =
+  { user: SessionUser; ended: null } | { user: null; ended: SessionEndReason | null };
+
+/**
+ * Checks a session against the database. `ended` says why a session that exists no longer
+ * counts; it is null when there was no session at all.
+ */
+export async function checkSession(
+  userId: string | undefined,
+  sessionVersion: number | undefined,
+): Promise<SessionCheck> {
+  if (!userId) return { user: null, ended: null };
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true, role: true, active: true },
+    select: { id: true, email: true, name: true, role: true, active: true, sessionVersion: true },
   });
-  if (!user?.active) return null;
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  if (!user?.active) return { user: null, ended: "deactivated" };
+  // Sessions from before sessionVersion existed carry none; they match version 0.
+  if (user.sessionVersion !== (sessionVersion ?? 0)) return { user: null, ended: "password" };
+  return {
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    ended: null,
+  };
+}
+
+/** The user behind a session, or null if deactivated, gone, or the session was ended. */
+export async function loadActiveUser(
+  userId: string | undefined,
+  sessionVersion?: number,
+): Promise<SessionUser | null> {
+  return (await checkSession(userId, sessionVersion)).user;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -80,9 +119,10 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        const u = user as SessionUser;
+        const u = user as SignedInUser;
         token.id = u.id;
         token.role = u.role;
+        token.sessionVersion = u.sessionVersion;
       }
       return token;
     },
@@ -90,6 +130,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id;
         session.user.role = token.role;
+        session.user.sessionVersion = token.sessionVersion;
       }
       return session;
     },
@@ -98,8 +139,12 @@ export const authOptions: NextAuthOptions = {
 
 /** For server components, route handlers, and actions. Always re-checked against the database. */
 export async function getCurrentUser(): Promise<SessionUser | null> {
+  return (await currentSession()).user;
+}
+
+async function currentSession(): Promise<SessionCheck> {
   const session = await getServerSession(authOptions);
-  return loadActiveUser(session?.user?.id);
+  return checkSession(session?.user?.id, session?.user?.sessionVersion);
 }
 
 /** For server actions: `const auth = await requireCapability("x"); if (!auth.ok) return auth;` */
@@ -112,10 +157,14 @@ export async function requireCapability(capability: Capability): Promise<Result<
   return ok(user);
 }
 
-/** For pages: redirects to /login or /forbidden instead of returning. */
+/**
+ * For pages: redirects instead of returning. A session that was ended goes to /session-ended,
+ * which signs the device out; sending it straight to /login would loop, because the proxy sends
+ * anyone with a session cookie from /login back to /dashboard.
+ */
 export async function requirePageCapability(capability?: Capability): Promise<SessionUser> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const { user, ended } = await currentSession();
+  if (!user) redirect(ended ? `/session-ended?reason=${ended}` : "/login");
   if (capability && !can(user.role, capability)) redirect("/forbidden");
   return user;
 }

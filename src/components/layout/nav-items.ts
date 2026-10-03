@@ -3,6 +3,7 @@
 import {
   ChartColumn,
   ClipboardList,
+  KeyRound,
   LayoutDashboard,
   Package,
   ReceiptText,
@@ -72,6 +73,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/categories", label: "Categories", icon: Tags, capability: "categories.manage" },
       { href: "/suppliers", label: "Suppliers", icon: Truck, capability: "suppliers.manage" },
       { href: "/users", label: "Users", icon: Users, capability: "users.manage" },
+      {
+        href: "/account",
+        label: "My account",
+        shortLabel: "Account",
+        icon: KeyRound,
+        capability: "account.password",
+      },
     ],
   },
 ];

@@ -16,7 +16,8 @@ export const CHANGE_TYPE_LABEL: Record<InventoryChangeType, string> = {
   RESTOCK: "Restock",
   EDIT: "Edit",
   REFUND: "Refund",
-  REMOVAL: "Removal",
+  ARCHIVE: "Archive",
+  RESTORE: "Restore",
 };
 
 const CHANGE_TYPE_TONE: Record<InventoryChangeType, BadgeTone> = {
@@ -24,7 +25,8 @@ const CHANGE_TYPE_TONE: Record<InventoryChangeType, BadgeTone> = {
   RESTOCK: "ok",
   EDIT: "neutral",
   REFUND: "warn",
-  REMOVAL: "danger",
+  ARCHIVE: "danger",
+  RESTORE: "ok",
 };
 
 const timeFormat = new Intl.DateTimeFormat("en-PH", {

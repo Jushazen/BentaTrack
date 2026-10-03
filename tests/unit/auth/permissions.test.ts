@@ -25,7 +25,7 @@ const PLAN_STAFF_ALLOWED: Capability[] = [
   "dashboard.staff",
 ];
 const PLAN_OWNER_ONLY: Capability[] = [
-  "products.delete",
+  "products.archive",
   "products.cost",
   "suppliers.read",
   "suppliers.manage",
@@ -33,6 +33,7 @@ const PLAN_OWNER_ONLY: Capability[] = [
   "reports.read",
   "users.manage",
   "dashboard.owner",
+  "account.password",
 ];
 
 describe("capability matrix", () => {

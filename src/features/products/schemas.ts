@@ -142,11 +142,12 @@ export const updateProductSchema = z.object({
     .transform((value) => value === "true"),
 });
 
-export const deleteProductSchema = z.object({ id: id("Missing product.") });
+/** Archive or restore (FR-004, H1): the owner picks a product by id. */
+export const productIdSchema = z.object({ id: id("Missing product.") });
 
 export type CreateProductInput = z.output<typeof createProductSchema>;
 export type UpdateProductInput = z.output<typeof updateProductSchema>;
-export type DeleteProductInput = z.input<typeof deleteProductSchema>;
+export type ProductIdInput = z.input<typeof productIdSchema>;
 
 /** Filters on the product list page (read from the URL). */
 export const productFiltersSchema = z.object({
@@ -156,6 +157,8 @@ export const productFiltersSchema = z.object({
   stock: z.enum(["low", "out"]).optional().catch(undefined),
   /** Owner only: products with no purchase price yet (A7 follow-on). */
   cost: z.literal("missing").optional().catch(undefined),
+  /** Owner only: archived products instead of the ones in use (FR-057). */
+  archived: z.literal("1").optional().catch(undefined),
   page: z.coerce.number().int().min(1).max(10_000).optional().catch(undefined),
 });
 

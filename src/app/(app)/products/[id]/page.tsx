@@ -1,5 +1,6 @@
 // Product details (FR-002, FR-006, FR-009). Leaf 3.2. Purchase price and supplier appear only for
-// the owner (FR-042); only the owner can delete (FR-004). Restock and history link: leaf 3.4.
+// the owner (FR-042); only the owner archives and restores (FR-004, H1). An archived product is
+// read-only until restored (FR-059). Restock and history link: leaf 3.4.
 import { ArrowLeft, History, Pencil } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -7,8 +8,15 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { buttonClasses } from "@/components/ui/button";
 import { RestockForm } from "@/features/inventory/restock-form";
-import { DeleteProductButton } from "@/features/products/delete-product-button";
-import { NeedsCostBadge, StockStatusBadge } from "@/features/products/product-badges";
+import {
+  ArchiveProductButton,
+  RestoreProductButton,
+} from "@/features/products/archive-product-buttons";
+import {
+  ArchivedBadge,
+  NeedsCostBadge,
+  StockStatusBadge,
+} from "@/features/products/product-badges";
 import { ProductImage } from "@/features/products/product-image";
 import { getProduct } from "@/features/products/queries";
 import { requirePageCapability } from "@/lib/auth";
@@ -56,6 +64,7 @@ export default async function ProductDetailPage({ params }: PageProps<"/products
               {product.code} · {product.categoryName}
             </p>
             <p className="mt-3 flex flex-wrap gap-2">
+              {product.archived && <ArchivedBadge />}
               <StockStatusBadge status={product.status} />
               {product.needsCost && <NeedsCostBadge />}
             </p>
@@ -85,7 +94,14 @@ export default async function ProductDetailPage({ params }: PageProps<"/products
             <Row label="Date added">{addedFormat.format(product.createdAt)}</Row>
           </dl>
 
-          {can(user.role, "inventory.restock") && (
+          {product.archived && (
+            <p className="text-muted">
+              This product is archived as discontinued. It can&apos;t be sold, restocked, or edited
+              until the owner restores it.
+            </p>
+          )}
+
+          {!product.archived && can(user.role, "inventory.restock") && (
             <RestockForm productId={product.id} productName={product.name} />
           )}
 
@@ -99,15 +115,18 @@ export default async function ProductDetailPage({ params }: PageProps<"/products
                 <span>View history</span>
               </Link>
             )}
-            {can(user.role, "products.update") && (
+            {!product.archived && can(user.role, "products.update") && (
               <Link href={`/products/${product.id}/edit`} className={buttonClasses("primary")}>
                 <Pencil aria-hidden className="size-4 shrink-0" />
                 <span>Edit product</span>
               </Link>
             )}
-            {can(user.role, "products.delete") && (
-              <DeleteProductButton id={product.id} name={product.name} />
-            )}
+            {can(user.role, "products.archive") &&
+              (product.archived ? (
+                <RestoreProductButton id={product.id} name={product.name} />
+              ) : (
+                <ArchiveProductButton id={product.id} name={product.name} />
+              ))}
           </div>
         </div>
       </div>

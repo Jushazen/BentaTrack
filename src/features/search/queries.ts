@@ -57,7 +57,8 @@ export async function searchProducts(rawQuery: unknown): Promise<Result<SearchHi
            p."sellingPrice", p."stockQuantity", p."lowStockThreshold", p."imageUrl"
     from "Product" p
     join "Category" c on c.id = p."categoryId"
-    where p.name ilike ${contains} or p.code ilike ${contains} or lower(p.barcode) = lower(${q})
+    where p."archivedAt" is null
+      and (p.name ilike ${contains} or p.code ilike ${contains} or lower(p.barcode) = lower(${q}))
     order by
       case
         when lower(p.barcode) = lower(${q}) or lower(p.code) = lower(${q}) then 0
@@ -85,7 +86,8 @@ export async function lookupProduct(rawCode: unknown): Promise<Result<SearchHit 
            p."sellingPrice", p."stockQuantity", p."lowStockThreshold", p."imageUrl"
     from "Product" p
     join "Category" c on c.id = p."categoryId"
-    where lower(p.barcode) = lower(${code}) or lower(p.code) = lower(${code})
+    where p."archivedAt" is null
+      and (lower(p.barcode) = lower(${code}) or lower(p.code) = lower(${code}))
     order by case when lower(p.barcode) = lower(${code}) then 0 else 1 end
     limit 1`;
   return ok(rows[0] ? toHit(rows[0]) : null);
@@ -103,6 +105,7 @@ export async function catalogSnapshot(): Promise<Result<CatalogEntry[]>> {
            p."sellingPrice", p."stockQuantity", p."lowStockThreshold", p."imageUrl"
     from "Product" p
     join "Category" c on c.id = p."categoryId"
+    where p."archivedAt" is null
     order by p.name, p.code`;
   return ok(rows);
 }

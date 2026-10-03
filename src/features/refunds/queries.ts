@@ -124,7 +124,8 @@ export type SaleRefund = {
   /** Centavos. */
   amount: number;
   note: string | null;
-  items: { productName: string; quantity: number }[];
+  /** `returnedToStock` is false for units kept out of stock, e.g. damaged (H4.2). */
+  items: { productName: string; quantity: number; returnedToStock: boolean }[];
 };
 
 export type SaleDetail = {
@@ -184,7 +185,11 @@ export async function getSale(id: string): Promise<Result<SaleDetail>> {
           note: true,
           user: { select: { name: true } },
           items: {
-            select: { quantity: true, saleItem: { select: { productName: true } } },
+            select: {
+              quantity: true,
+              returnedToStock: true,
+              saleItem: { select: { productName: true } },
+            },
             orderBy: { id: "asc" },
           },
         },
@@ -215,6 +220,7 @@ export async function getSale(id: string): Promise<Result<SaleDetail>> {
       items: refund.items.map((item) => ({
         productName: item.saleItem.productName,
         quantity: item.quantity,
+        returnedToStock: item.returnedToStock,
       })),
     })),
   });

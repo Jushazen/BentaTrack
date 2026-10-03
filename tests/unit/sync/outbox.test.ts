@@ -135,7 +135,7 @@ test("[FR-034] offline restocks and refunds queue too, and a restock raises the 
       occurredAt: new Date().toISOString(),
       saleId: randomUUID(),
       items: [{ saleItemId: "line-1", quantity: 1 }],
-      note: "",
+      note: "Wrong size",
     },
     db,
   );

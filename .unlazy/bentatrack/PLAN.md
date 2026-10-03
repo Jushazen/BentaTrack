@@ -4,7 +4,7 @@ Scope: bentatrack (this file lives at .unlazy/bentatrack/PLAN.md)
 Depth: tree 3 (root → branch → leaf)
 Mode: orchestrated, sequential fallback
 
-Sources: `docs/SRS V2.pdf` as amended by `docs/SRS-V2-amendments.md` (decisions of 2026-09-24).
+Sources: `docs/SRS_V2.1.docx` (since 2026-10-03; it incorporates `docs/SRS V2.pdf` and all of the former amendments file, both now removed). Amendment IDs cited in ledgers (A1–H4) refer to that file's git history.
 Ledgers are generated from `scripts/plan/ledgers.mjs`; edit the ledger directly once a leaf has started.
 
 ## Contract
@@ -17,13 +17,13 @@ Ledgers are generated from `scripts/plan/ledgers.mjs`; edit the ledger directly 
 
 ### Interfaces
 
-- **Schema names:** exactly as checked by `scripts/gates/check-schema.mjs`: models `User, Category, Supplier, Product, Sale, SaleItem, Refund, RefundItem, InventoryChange`; enums `Role {OWNER, STAFF}`, `PaymentMethod {CASH, GCASH}`, `DiscountType {AMOUNT, PERCENT}`, `InventoryChangeType {SALE, RESTOCK, EDIT, REFUND, REMOVAL}`.
+- **Schema names:** exactly as checked by `scripts/gates/check-schema.mjs`: models `User, Category, Supplier, Product, Sale, SaleItem, Refund, RefundItem, InventoryChange`; enums `Role {OWNER, STAFF}`, `PaymentMethod {CASH, GCASH}`, `DiscountType {AMOUNT, PERCENT}`, `InventoryChangeType {SALE, RESTOCK, EDIT, REFUND, ARCHIVE, RESTORE}`.
 - **Money:** integer centavos (`Int`) everywhere; format with `src/lib/money.ts` as `₱1,234.50`. Never floats.
 - **Time:** stored as UTC `DateTime`; report periods computed in `Asia/Manila`, weeks start Monday (`src/lib/dates.ts`).
 - **Product status:** computed, not stored: `stockStatus(qty, threshold)` in `src/lib/stock-status.ts` → `OUT_OF_STOCK` if qty = 0, `LOW_STOCK` if 0 < qty ≤ threshold, else `ACTIVE`. Default threshold 5.
-- **Snapshots:** `SaleItem` and `InventoryChange` copy `productName`/`productCode`; their `productId` is nullable with `onDelete: SetNull`, so hard-deleting a discontinued product keeps history (A2).
-- **IDs:** `Sale`, `Refund`, and `InventoryChange` ids are UUIDs generated on the client so offline replays are idempotent. Other models use `cuid()`.
-- **Offline-capable commands:** `recordSale`, `refundSale`, `restockProduct`. Each takes `{ id: uuid, occurredAt: ISO string, ... }`, is idempotent by `id` (a replay returns the original result without re-applying), and is called from the client through `runCommand(name, payload)` in `src/lib/commands.ts`. Leaf 2.1 creates an online-only `runCommand`; leaf 6.2 adds the outbox behind the same signature.
+- **Snapshots:** `SaleItem` and `InventoryChange` copy `productName`/`productCode`; their `productId` is nullable with `onDelete: SetNull`, so history survives renames (A2). Products are archived (`Product.archivedAt`), never deleted (H1).
+- **IDs:** `Sale`, `Refund`, and `InventoryChange` ids are UUIDs generated on the client so offline replays are idempotent. Other models use `cuid()`. (Rev 5, branch 9: `Product`, `Category`, `Supplier`, and `User` also accept client-generated UUIDs, so records created offline can be referenced by later offline changes before they sync.)
+- **Offline-capable commands:** `recordSale`, `refundSale`, `restockProduct`. Each takes `{ id: uuid, occurredAt: ISO string, ... }`, is idempotent by `id` (a replay returns the original result without re-applying), and is called from the client through `runCommand(name, payload)` in `src/lib/commands.ts`. Leaf 2.1 creates an online-only `runCommand`; leaf 6.2 adds the outbox behind the same signature. (Rev 5, branch 9: every mutating action becomes offline-capable through the same outbox: product, category, supplier, and account changes and the owner's password change, leaves 9.4 and 9.5.)
 - **Server action result:** `type Result<T> = { ok: true; data: T } | { ok: false; error: { code: "UNAUTHORIZED" | "FORBIDDEN" | "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "OFFLINE"; message: string; fieldErrors?: Record<string, string[]> } }` from `src/lib/result.ts`. Actions never throw to the client.
 - **Validation:** every server action parses input with a Zod schema from its feature's `schemas.ts` before touching the database.
 - **Inventory log:** `recordInventoryChange(tx, { productId, type, quantityChange, userId, saleId?, refundId?, note?, occurredAt })` in `src/lib/inventory-log.ts` computes `stockAfter` and snapshots, inside the caller's transaction.
@@ -39,7 +39,7 @@ Ledgers are generated from `scripts/plan/ledgers.mjs`; edit the ledger directly 
 | `sales.create`, `sales.read`, `refunds.create` | ✓ | ✓ |
 | `products.read`, `products.create`, `products.update`, `inventory.restock`, `inventory.history`, `categories.read`, `search` | ✓ | ✓ |
 | `dashboard.staff` | ✓ | ✓ |
-| `products.delete`, `products.cost` (purchase price, profit), `suppliers.read`, `suppliers.manage`, `categories.manage`, `reports.read`, `users.manage`, `dashboard.owner` | ✓ | ✗ |
+| `products.archive` (archive and restore, FR-004), `products.cost` (purchase price, profit), `suppliers.read`, `suppliers.manage`, `categories.manage`, `reports.read`, `users.manage`, `dashboard.owner`, `account.password` (own password, FR-060) | ✓ | ✗ |
 
 ### Conventions
 
@@ -47,14 +47,14 @@ See `CLAUDE.md` "Coding conventions". Manual gates are reviewed by the team lead
 
 ## Current contract inventory
 
-Contract revision: 3 (SRS V2 + amendments of 2026-09-24; rev 2: email login, NextAuth v4, Refund tables confirmed; rev 3: page loads < 1 s on 4G, < 2 s on weak 4G).
+Contract revision: 5 (SRS V2 + amendments of 2026-09-24; rev 2: email login, NextAuth v4, Refund tables confirmed; rev 3: page loads < 1 s on 4G, < 2 s on weak 4G; rev 4 (2026-10-01): amendments section H and G3: owner password change, standalone PWA install, archive instead of delete, refund fixes; rev 5 (2026-10-03): SRS v2.1 becomes the only source; FR-049 every feature works offline, with FR-034, FR-036, FR-045, FR-053, FR-055, FR-060 reworded to match).
 
 | ID | Required outcome or constraint | Owner | Observing gate or manual review | Disposition | Revision |
 |---|---|---|---|---|---|
 | C1 | FR-001 authorized users add products | 3.2 | leaf-3.2:G1, leaf-3.2:G2 | ACTIVE | 1 |
 | C2 | FR-002 product fields incl. barcode (optional, unique) and low-stock threshold | 2.1, 3.2 | leaf-2.1:G2, leaf-2.1:G6, leaf-3.2:G1 | ACTIVE | 1 |
 | C3 | FR-003 edit any product | 3.2 | leaf-3.2:G1, leaf-3.2:G2 | ACTIVE | 1 |
-| C4 | FR-004 owner permanently deletes discontinued products; history kept via snapshots | 2.1, 3.2 | leaf-2.1:G6, leaf-3.2:G1, leaf-3.2:G2 | ACTIVE | 1 |
+| C4 | FR-004 owner permanently deletes discontinued products; history kept via snapshots | 2.1, 3.2 | leaf-2.1:G6, leaf-3.2:G1, leaf-3.2:G2 | SUPERSEDED by C81 | 4 |
 | C5 | FR-005 stock reduced automatically on sale | 4.1 | leaf-4.1:G1 | ACTIVE | 1 |
 | C6 | FR-006 "Out of Stock" at zero without deleting | 2.1, 3.2 | leaf-2.1:G6, leaf-3.2:G2 | ACTIVE | 1 |
 | C7 | FR-007 stock continuously monitored (live status + alert on open) | 2.1, 3.1 | leaf-2.1:G6, leaf-3.1:G1 | ACTIVE | 1 |
@@ -85,9 +85,9 @@ Contract revision: 3 (SRS V2 + amendments of 2026-09-24; rev 2: email login, Nex
 | C32 | FR-031 owner full access incl. suppliers | 2.2, 3.3 | leaf-2.2:G2, leaf-3.3:G1 | ACTIVE | 1 |
 | C33 | FR-032 staff limits: no delete, cost, suppliers, reports, categories mgmt, users (A7) | 2.2, 2.3, 3.1, 3.2, 3.3, 5.1 | leaf-2.2:G2, leaf-2.3:G1, leaf-3.1:G1, leaf-3.2:G1, leaf-3.3:G1, leaf-5.1:G1 | ACTIVE | 1 |
 | C34 | FR-033 exactly two roles | 2.1, 2.2 | leaf-2.1:G2, leaf-2.2:G2 | ACTIVE | 1 |
-| C35 | FR-034 record sales, refunds, restocks offline | 6.2 | leaf-6.2:G1, leaf-6.2:G2 | ACTIVE | 1 |
+| C35 | FR-034 record sales, refunds, restocks offline | 6.2 | leaf-6.2:G1, leaf-6.2:G2 | SUPERSEDED by C88 (sales, refunds, restocks stay covered by leaf-6.2) | 5 |
 | C36 | FR-035 automatic sync on reconnect | 6.2 | leaf-6.2:G1, leaf-6.2:G2 | ACTIVE | 1 |
-| C37 | FR-036 no offline data lost | 6.2 | leaf-6.2:G1, leaf-6.2:G2 | ACTIVE | 1 |
+| C37 | FR-036 no offline data lost | 6.2 | leaf-6.2:G1, leaf-6.2:G2 | SUPERSEDED by C89 | 5 |
 | C38 | FR-037 per-product low-stock threshold, default 5 (B1) | 2.1 | leaf-2.1:G6 | ACTIVE | 1 |
 | C39 | FR-038 restock action (B2) | 3.4 | leaf-3.4:G1, leaf-3.4:G2 | ACTIVE | 1 |
 | C40 | FR-039 full or partial refunds restore stock (B3) | 4.2 | leaf-4.2:G1, leaf-4.2:G2 | ACTIVE | 1 |
@@ -100,7 +100,7 @@ Contract revision: 3 (SRS V2 + amendments of 2026-09-24; rev 2: email login, Nex
 | C47 | FR-046 passwords ≥ 8 chars, stored hashed | 2.2, 2.3 | leaf-2.2:G1, leaf-2.3:G1 | ACTIVE | 1 |
 | C48 | FR-047 gross profit, owner only; products without cost excluded | 5.1 | leaf-5.1:G1 | ACTIVE | 1 |
 | C49 | FR-048 no report export (exclusion) | root | root:R2 review | ACTIVE | 1 |
-| C50 | FR-049 product/supplier/category/user changes need a connection | 6.2 | leaf-6.2:G1 | ACTIVE | 1 |
+| C50 | FR-049 product/supplier/category/user changes need a connection | 6.2 | leaf-6.2:G1 | SUPERSEDED by C88, C90 | 5 |
 | C51 | FR-050 online login once, then session works offline | 6.1 | leaf-6.1:G2 | ACTIVE | 1 |
 | C52 | FR-051 online/offline indicator and pending count | 6.2 | leaf-6.2:G2 | ACTIVE | 1 |
 | C53 | §3.4 user told when sync completes or fails | 6.2 | leaf-6.2:G2 (SYNC-NOTIFY) | ACTIVE | 1 |
@@ -128,6 +128,27 @@ Contract revision: 3 (SRS V2 + amendments of 2026-09-24; rev 2: email login, Nex
 | C75 | Project installs, type-checks, lints, builds, starts, tests | 1.1 | GATES.md:G1–G10 | ACTIVE | 1 |
 | C76 | Guest users / public catalog | — | — | REMOVED_BY_USER | 1 |
 | C77 | Multi-device offline conflict handling (one device at a time) | — | — | REMOVED_BY_USER | 1 |
+| C78 | FR-060 (H2) owner changes own password (current + new, ≥ 8 chars); staff cannot; every signed-in device of that account is signed out | 8.1 | leaf-8.1:G1, leaf-8.1:G2 | ACTIVE | 4 |
+| C79 | F5/FR-045 a session ended by deactivation or password change lands on the login page (no redirect loop) | 8.1 | leaf-8.1:G1, leaf-8.1:G3 | ACTIVE | 4 |
+| C80 | H3/FR-061 installs as a standalone app with its own icon; install button where supported, Add to Home Screen steps on iPhone | 8.2 | leaf-8.2:G1, leaf-8.2:G2, leaf-8.2:G3 (manual, real Android + iPhone) | ACTIVE | 4 |
+| C81 | H1/FR-004, FR-057–059 owner archives and restores discontinued products; archived hidden from selling, search, catalog, alerts, counts; history kept; codes reserved; never deleted | 8.3 | leaf-8.3:G1, leaf-8.3:G2, leaf-8.3:G3 | ACTIVE | 4 |
+| C82 | H4.1 refund never dated before its sale | 8.4 | leaf-8.4:G1 | ACTIVE | 4 |
+| C83 | H4.2 per-item "return to stock?" choice; unreturned units not restocked but logged | 8.4 | leaf-8.4:G1, leaf-8.4:G2 | ACTIVE | 4 |
+| C84 | H4.3 refunds of archived products restock the archived product, which stays archived | 8.4 | leaf-8.4:G1 | ACTIVE | 4 |
+| C85 | H4.4 refund reason required | 8.4 | leaf-8.4:G1, leaf-8.4:G2 | ACTIVE | 4 |
+| C86 | H4.5, H4.6 refund payment method and unsynced-sale rule (already the behaviour; documentation only) | root | root:R2 review | ACTIVE | 4 |
+| C87 | G3 exchanges = refund then new sale (confirmed 2026-10-01; no new code) | root | root:R2 review | ACTIVE | 4 |
+| C88 | FR-034, FR-049 every change can be made offline: products (add, edit, stock correction, image, archive, restore), categories, suppliers, user accounts, owner password | 9.4, 9.5, 9.6 | leaf-9.4:G1, leaf-9.4:G2, leaf-9.5:G1, leaf-9.5:G2, leaf-9.6:G1 | ACTIVE | 5 |
+| C89 | FR-036 no data of any kind recorded offline is lost, across reloads and app restarts | 9.4, 9.6 | leaf-9.4:G1, leaf-9.6:G1 | ACTIVE | 5 |
+| C90 | FR-049 every page and feature works offline after one online login; offline pages and figures include unsynced changes | 9.2, 9.3, 9.6 | leaf-9.2:G2, leaf-9.3:G1, leaf-9.3:G2, leaf-9.6:G1 | ACTIVE | 5 |
+| C91 | FR-049 a sale recorded offline can be refunded before it syncs | 9.3 | leaf-9.3:G1, leaf-9.3:G2 | ACTIVE | 5 |
+| C92 | FR-053 a refused offline change of any kind stays on the device with its reason; retry or discard | 9.4, 9.5 | leaf-9.4:G1, leaf-9.4:G2, leaf-9.5:G1 | ACTIVE | 5 |
+| C93 | FR-055 each device keeps all data its user may see; staff never receive costs, suppliers, or accounts; owner data removed on sign-out | 9.1, 9.2 | leaf-9.1:G1, leaf-9.1:G2, leaf-9.2:G1, leaf-9.2:G2 | ACTIVE | 5 |
+| C94 | FR-045 deactivation or staff password reset signs out offline devices when they reconnect | 9.5 | leaf-9.5:G1, leaf-9.5:G2 | ACTIVE | 5 |
+| C95 | FR-060 password changed offline is checked at sync (wrong current password refused); every device of the account signed out | 9.5 | leaf-9.5:G1, leaf-9.5:G2 | ACTIVE | 5 |
+| C96 | Long offline use: saved pages and device data have no age limit; installed app keeps working 8+ days offline on real phones | 9.1, 9.2, 9.6 | leaf-9.1:G1 (OFFLINE-PERSIST), leaf-9.2:G1 (SW-NO-EXPIRY), leaf-9.6:G3 (manual, real Android + iPhone) | ACTIVE | 5 |
+| C97 | No plain-text password or staff-visible owner data stored on the device | 9.5 | leaf-9.5:G1 (OFFLINE-NO-PLAINTEXT), leaf-9.5:G3 (manual review) | ACTIVE | 5 |
+| C98 | FR-036 a deactivated staff member's queued changes are not lost: the owner can send those made before deactivation, still under the staff member's name; later ones are refused (decided 2026-10-03, option B) | 9.5 | leaf-9.5:G1, leaf-9.5:G2 | ACTIVE | 5 |
 
 ### Handoffs: requirements that no command can fully verify
 
@@ -142,6 +163,8 @@ These keep a manual gate or wait on the product owner. They are visible, not dro
 | C63 | Visual taste (white/brown, business-appropriate) is a human judgment. | Product owner, leaf-3.1:G2 |
 | C64 (official logo) | The owner must supply the file. A text wordmark is used meanwhile. | Product owner |
 | C68 | Extensibility is an architecture judgment. | Team leader at root:R2 |
+| C96 (real phones) | More than a week offline on an installed app, including iPhone storage rules, needs real devices. | Team, leaf-9.6:G3 |
+| C97 (review) | Whether stored data could expose a password or owner data is a security judgment. | Team leader, leaf-9.5:G3 |
 | root:R3 | Demo to the product owner. | Team + product owner |
 
 ## State vocabulary
@@ -182,10 +205,22 @@ Branch state is exactly one of OPEN, VERIFIED, or ABANDONED, derived from its le
   - 7 Quality and release ............... gates/node-7.md
     - 7.1 End-to-end flows, performance . gates/leaf-7.1.md
     - 7.2 Deployment .................... gates/leaf-7.2.md
+  - 8 Change requests 2026-10-01 ........ gates/node-8.md
+    - 8.1 Owner password change ......... gates/leaf-8.1.md
+    - 8.2 Standalone app install ........ gates/leaf-8.2.md
+    - 8.3 Archive discontinued products . gates/leaf-8.3.md
+    - 8.4 Refund fixes .................. gates/leaf-8.4.md
+  - 9 Everything works offline ........ gates/node-9.md
+    - 9.1 Device data store ............. gates/leaf-9.1.md
+    - 9.2 Every page opens offline ...... gates/leaf-9.2.md
+    - 9.3 Sales, dashboard, reports ..... gates/leaf-9.3.md
+    - 9.4 Catalog changes offline ....... gates/leaf-9.4.md
+    - 9.5 Account changes offline ....... gates/leaf-9.5.md
+    - 9.6 Long offline period e2e ....... gates/leaf-9.6.md
 
 ## Leaf dispatch table
 
-Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In sequential mode a later leaf may take over a file from a VERIFIED earlier leaf only through a logged plan amendment (planned: 6.2 takes `src/lib/commands.ts` from 2.1).
+Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In sequential mode a later leaf may take over a file from a VERIFIED earlier leaf only through a logged plan amendment (planned: 6.2 takes `src/lib/commands.ts` from 2.1; in branch 9, each leaf takes the shared offline, sync, and feature files it lists from the earlier leaves that own them, logged when it starts).
 
 | Leaf | Owns | Needs | Tier | Planned wave | State |
 |---|---|---|---|---|---|
@@ -206,8 +241,18 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 | 6.2 | src/lib/offline/outbox.ts, src/lib/offline/sync.ts, src/lib/commands.ts, src/app/api/sync/\*\*, src/components/sync/\*\*, tests/unit/sync/\*\*, tests/integration/sync/\*\*, tests/e2e/sync/\*\* | 6.1, 4.2 | judgment | 10 | VERIFIED |
 | 7.1 | tests/e2e/flows/\*\*, tests/perf/\*\*, prisma/seed-demo.ts, scripts/gates/perf/\*\*; amended edits: playwright.config.ts, src/features/products/queries.ts (page size) | 2.3, 5.2, 6.2 | judgment | 12 | VERIFIED |
 | 7.2 | docs/DEPLOY.md, src/app/api/health/\*\*, scripts/gates/check-deploy.mjs, tests/integration/health/\*\*, vercel.json; amended edits: .env.example (PRODUCTION_URL placeholder) | 7.1 | judgment | 13 | IN-FLIGHT |
+| 8.1 | src/features/account/\*\*, src/app/(app)/account/\*\*, src/app/(auth)/session-ended/\*\*, tests/integration/account/\*\*, tests/e2e/account/\*\*, prisma/schema.prisma, prisma/migrations/\*\*, src/lib/auth.ts, src/lib/permissions.ts, src/types/\*\*, src/components/layout/nav-items.ts, src/app/(auth)/login/page.tsx, src/features/users/actions.ts | 2.2, 2.3, 3.1 | judgment | 14 | VERIFIED |
+| 8.2 | src/components/install/\*\*, tests/e2e/install/\*\*, tests/unit/install/\*\*, src/app/manifest.ts, src/app/layout.tsx, src/components/layout/app-shell.tsx, public/icons/\*\* | 8.1 | judgment | 15 | VERIFIED |
+| 8.3 | src/features/products/\*\*, src/app/(app)/products/\*\*, tests/integration/products/\*\*, tests/e2e/products/\*\*, tests/integration/archive/\*\*, prisma/schema.prisma, prisma/migrations/\*\*, prisma/seed-demo.ts, scripts/gates/check-schema.mjs, src/lib/permissions.ts, src/features/search/queries.ts, src/features/sales/actions.ts, src/features/inventory/actions.ts, src/features/inventory/history-list.tsx, src/features/dashboard/queries.ts, src/app/(app)/layout.tsx, CLAUDE.md | 8.2 | judgment | 16 | VERIFIED |
+| 8.4 | src/features/refunds/\*\*, src/app/(app)/sales/\*\*, tests/integration/refunds/\*\*, tests/e2e/refunds/\*\*, tests/unit/refunds/\*\*, prisma/schema.prisma, prisma/migrations/\*\*, tests/e2e/flows/flows.spec.ts, tests/integration/sync/sync-route.test.ts, tests/unit/sync/outbox.test.ts | 8.3 | judgment | 17 | VERIFIED |
+| 9.1 | src/lib/offline/db.ts, src/lib/offline/catalog.ts, src/lib/offline/snapshot.ts, src/app/api/offline/\*\*, src/app/api/catalog/\*\*, src/components/offline/\*\*, tests/unit/offline/\*\*, tests/integration/offline/\*\*, tests/e2e/offline/\*\* | 8.4 | judgment | 18 | READY |
+| 9.2 | src/app/sw.ts, src/app/sw-rules.ts, src/app/offline/\*\*, src/lib/offline/read/\*\*, src/app/(app)/products/\*\*, src/app/(app)/categories/\*\*, src/app/(app)/suppliers/\*\*, src/app/(app)/users/\*\*, src/app/(app)/account/\*\*, src/app/(app)/inventory-history/\*\*, src/features/products/\*\*, src/features/categories/\*\*, src/features/suppliers/\*\*, src/features/users/\*\*, src/features/inventory/\*\*, tests/unit/offline-read/\*\*, tests/e2e/offline-pages/\*\* | 9.1 | judgment | 19 | WAITING |
+| 9.3 | src/lib/offline/sales-read.ts, src/lib/offline/outbox.ts, src/app/api/sync/\*\*, src/app/(app)/sales/\*\*, src/app/(app)/dashboard/\*\*, src/app/(app)/reports/\*\*, src/features/sales/\*\*, src/features/refunds/\*\*, src/features/dashboard/\*\*, src/features/reports/\*\*, tests/unit/offline-sales/\*\*, tests/integration/offline-sales/\*\*, tests/e2e/offline-sales/\*\* | 9.2 | judgment | 20 | WAITING |
+| 9.4 | src/lib/offline/outbox.ts, src/lib/offline/sync.ts, src/lib/commands.ts, src/app/api/sync/\*\*, src/components/sync/\*\*, src/features/products/\*\*, src/features/categories/\*\*, src/features/suppliers/\*\*, src/lib/storage.ts, prisma/schema.prisma, prisma/migrations/\*\*, tests/unit/sync-catalog/\*\*, tests/integration/sync-catalog/\*\*, tests/e2e/sync-catalog/\*\* | 9.3 | judgment | 21 | WAITING |
+| 9.5 | src/lib/offline/outbox.ts, src/lib/offline/sync.ts, src/app/api/sync/\*\*, src/features/users/\*\*, src/features/account/\*\*, src/app/(auth)/session-ended/\*\*, src/lib/auth.ts, src/components/offline/\*\*, tests/unit/sync-accounts/\*\*, tests/integration/sync-accounts/\*\*, tests/e2e/sync-accounts/\*\* | 9.4 | judgment | 22 | WAITING |
+| 9.6 | tests/e2e/offline-day/\*\*, prisma/seed-demo.ts, CLAUDE.md | 9.5 | judgment | 23 | WAITING |
 
-**Recommended sequential order:** 1.1 → 2.1 → 2.2 → 3.1 → 2.3 → 3.3 → 3.2 → 3.4 → 3.5 → 4.1 → 4.2 → 5.1 → 5.2 → 6.1 → 6.2 → 7.1 → 7.2. Close each branch's `node-*.md` ledger when its last child is VERIFIED.
+**Recommended sequential order:** 1.1 → 2.1 → 2.2 → 3.1 → 2.3 → 3.3 → 3.2 → 3.4 → 3.5 → 4.1 → 4.2 → 5.1 → 5.2 → 6.1 → 6.2 → 7.1 → 7.2 → 8.1 → 8.2 → 8.3 → 8.4 → 9.1 → 9.2 → 9.3 → 9.4 → 9.5 → 9.6. Branches 8 and 9 do not wait for 7.2 (blocked on the owner's accounts); 7.2 is re-run after branch 9. Close each branch's `node-*.md` ledger when its last child is VERIFIED.
 
 ## Status log
 

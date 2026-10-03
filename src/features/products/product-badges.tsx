@@ -17,3 +17,8 @@ export function StockStatusBadge({ status }: { status: StockStatus }) {
 export function NeedsCostBadge() {
   return <Badge tone="warn">Needs cost</Badge>;
 }
+
+/** Discontinued and archived by the owner (H1). Shown instead of hiding why it can't be sold. */
+export function ArchivedBadge() {
+  return <Badge tone="neutral">Archived</Badge>;
+}

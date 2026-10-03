@@ -93,6 +93,7 @@ export async function recordSale(input: RecordSaleInput): Promise<Result<SaleRes
             purchasePrice: true,
             stockQuantity: true,
             lowStockThreshold: true,
+            archivedAt: true,
           },
         });
         const byId = new Map(products.map((product) => [product.id, product]));
@@ -106,6 +107,11 @@ export async function recordSale(input: RecordSaleInput): Promise<Result<SaleRes
           const product = byId.get(item.productId);
           if (!product) {
             missing[lineKey(item.productId)] = ["This product no longer exists. Remove it."];
+            continue;
+          }
+          // An archived (discontinued) product can't be sold until it is restored (FR-059).
+          if (product.archivedAt) {
+            missing[lineKey(item.productId)] = [`${product.name} was discontinued. Remove it.`];
             continue;
           }
           lines.push({ product, quantity: item.quantity });
@@ -123,7 +129,7 @@ export async function recordSale(input: RecordSaleInput): Promise<Result<SaleRes
         }
         if (Object.keys(missing).length > 0) {
           throw new Refusal(
-            fail("NOT_FOUND", "A product in the cart no longer exists.", {
+            fail("NOT_FOUND", "A product in the cart is no longer sold.", {
               ...missing,
               ...repriced,
               ...short,

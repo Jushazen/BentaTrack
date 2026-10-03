@@ -2,8 +2,9 @@
 
 // Server actions (mutations): Product records (FR-001–006, FR-037). Leaf 3.2.
 // Forms post FormData because they can carry a photo. Staff may add and edit products but never
-// set or see purchase price or supplier (FR-032, A7 follow-on); only the owner deletes (FR-004).
-// Every add, edit, and delete writes an InventoryChange row (FR-012).
+// set or see purchase price or supplier (FR-032, A7 follow-on). Only the owner archives and restores
+// discontinued products; nothing is ever deleted (FR-004, H1).
+// Every add, edit, archive, and restore writes an InventoryChange row (FR-012, FR-058).
 import { revalidatePath } from "next/cache";
 import type { LowStockAlert } from "@/components/layout/low-stock-alerts";
 import { Prisma } from "@/generated/prisma/client";
@@ -17,16 +18,17 @@ import { stockStatus, type StockStatus } from "@/lib/stock-status";
 import { ImageStorageError, deleteProductImage, storeProductImage } from "@/lib/storage";
 import {
   createProductSchema,
-  deleteProductSchema,
   formToObject,
+  productIdSchema,
   updateProductSchema,
   type CreateProductInput,
-  type DeleteProductInput,
+  type ProductIdInput,
   type UpdateProductInput,
 } from "./schemas";
 
 const PRODUCTS_PATH = "/products";
 const GONE = "That product no longer exists.";
+const ARCHIVED = "This product is archived. Restore it first.";
 
 export type SavedProduct = { id: string; name: string; lowStockAlerts: LowStockAlert[] };
 
@@ -85,7 +87,7 @@ async function referenceProblems(
         ],
         ...(exceptId && { id: { not: exceptId } }),
       },
-      select: { name: true, code: true, barcode: true },
+      select: { name: true, code: true, barcode: true, archivedAt: true },
     }),
   ]);
   if (!category) return fieldError("categoryId", "That category no longer exists. Choose another.");
@@ -93,13 +95,15 @@ async function referenceProblems(
     return fieldError("supplierId", "That supplier no longer exists. Choose another.");
   }
   if (clash) {
+    // Archived products keep their code and barcode reserved (FR-059).
+    const owner = clash.archivedAt ? `${clash.name} (archived)` : clash.name;
     const sameCode = clash.code.toLowerCase() === input.code.toLowerCase();
     return sameCode
-      ? fail("CONFLICT", `Code ${clash.code} is already used by ${clash.name}.`, {
-          code: [`Already used by ${clash.name}.`],
+      ? fail("CONFLICT", `Code ${clash.code} is already used by ${owner}.`, {
+          code: [`Already used by ${owner}.`],
         })
-      : fail("CONFLICT", `That barcode is already used by ${clash.name}.`, {
-          barcode: [`Already used by ${clash.name}.`],
+      : fail("CONFLICT", `That barcode is already used by ${owner}.`, {
+          barcode: [`Already used by ${owner}.`],
         });
   }
   return null;
@@ -274,6 +278,7 @@ export async function updateProduct(formData: FormData): Promise<Result<SavedPro
     const saved = await db.$transaction(async (tx) => {
       const before = await lockProduct(tx, input.id);
       if (!before) throw new Refusal(fail("NOT_FOUND", GONE));
+      if (before.archivedAt) throw new Refusal(fail("CONFLICT", ARCHIVED));
 
       // Only touch stock when the user changed it, and only if nothing else (a sale, a
       // restock) changed it since the form was opened.
@@ -338,44 +343,60 @@ export async function updateProduct(formData: FormData): Promise<Result<SavedPro
   }
 }
 
-// ---- Delete (FR-004) ----------------------------------------------------------------
+// ---- Archive and restore (FR-004, FR-057–059) ---------------------------------------
 
 /**
- * Owner only. Permanently deletes a discontinued product. Its sales and history keep the
- * product's name and code (A2), and the removal itself is logged.
+ * Owner only. Sets or clears archivedAt and logs it with a zero quantity change. Stock, photo, and
+ * every other detail are kept, so restoring brings the product back exactly as it was (FR-058).
  */
-export async function deleteProduct(
-  input: DeleteProductInput,
+async function setArchived(
+  input: ProductIdInput,
+  archive: boolean,
 ): Promise<Result<{ id: string; name: string }>> {
-  const auth = await requireCapability("products.delete");
+  const auth = await requireCapability("products.archive");
   if (!auth.ok) return auth;
-  const parsed = deleteProductSchema.safeParse(input);
+  const parsed = productIdSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error.issues);
   const { id } = parsed.data;
 
   try {
-    const removed = await db.$transaction(async (tx) => {
-      const product = await lockProduct(tx, id);
-      if (!product) throw new Refusal(fail("NOT_FOUND", GONE));
-      if (product.stockQuantity !== 0) {
-        await tx.product.update({ where: { id }, data: { stockQuantity: 0 } });
+    const product = await db.$transaction(async (tx) => {
+      const before = await lockProduct(tx, id);
+      if (!before) throw new Refusal(fail("NOT_FOUND", GONE));
+      if (Boolean(before.archivedAt) === archive) {
+        const state = archive ? "already archived" : "not archived";
+        throw new Refusal(fail("CONFLICT", `${before.name} is ${state}.`));
       }
+      await tx.product.update({ where: { id }, data: { archivedAt: archive ? new Date() : null } });
       await recordInventoryChange(tx, {
         productId: id,
-        type: "REMOVAL",
-        quantityChange: -product.stockQuantity,
+        type: archive ? "ARCHIVE" : "RESTORE",
+        quantityChange: 0,
         userId: auth.data.id,
         occurredAt: new Date(),
-        note: "Product deleted (discontinued)",
+        note: archive ? "Product archived (discontinued)" : "Product restored",
       });
-      await tx.product.delete({ where: { id } });
-      return product;
+      return before;
     });
-    await deleteProductImage(removed.imageUrl);
     revalidatePath(PRODUCTS_PATH);
-    return ok({ id, name: removed.name });
+    revalidatePath(`${PRODUCTS_PATH}/${id}`);
+    return ok({ id, name: product.name });
   } catch (err) {
     if (err instanceof Refusal) return err.result;
     return unexpected(err);
   }
+}
+
+/** Owner only. Hides a discontinued product from selling, search, and stock figures (FR-057). */
+export async function archiveProduct(
+  input: ProductIdInput,
+): Promise<Result<{ id: string; name: string }>> {
+  return setArchived(input, true);
+}
+
+/** Owner only. Puts an archived product back in use, unchanged. */
+export async function restoreProduct(
+  input: ProductIdInput,
+): Promise<Result<{ id: string; name: string }>> {
+  return setArchived(input, false);
 }

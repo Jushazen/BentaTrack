@@ -1,6 +1,7 @@
 // Edit product (FR-003). Leaf 3.2. Every saved change is logged in the inventory history.
+// Archived products can't be edited until restored (FR-059), so this sends them to their page.
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { listCategoryOptions } from "@/features/categories/queries";
 import { ProductForm } from "@/features/products/product-form";
 import { getProduct } from "@/features/products/queries";
@@ -21,6 +22,7 @@ export default async function EditProductPage({ params }: PageProps<"/products/[
     can(user.role, "suppliers.read") ? listSupplierOptions() : null,
   ]);
   if (!product.ok) notFound();
+  if (product.data.archived) redirect(`/products/${id}`);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

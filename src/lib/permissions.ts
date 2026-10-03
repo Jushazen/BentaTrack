@@ -12,7 +12,7 @@ export const CAPABILITIES = [
   "products.read",
   "products.create",
   "products.update",
-  "products.delete",
+  "products.archive",
   "products.cost",
   "inventory.restock",
   "inventory.history",
@@ -25,6 +25,7 @@ export const CAPABILITIES = [
   "users.manage",
   "dashboard.staff",
   "dashboard.owner",
+  "account.password",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -56,6 +57,7 @@ export function can(role: Role | null | undefined, capability: Capability): bool
  */
 export const ROUTE_CAPABILITIES: readonly (readonly [prefix: string, capability: Capability])[] = [
   ["/users", "users.manage"],
+  ["/account", "account.password"],
   ["/reports", "reports.read"],
   ["/suppliers", "suppliers.manage"],
   ["/categories", "categories.manage"],

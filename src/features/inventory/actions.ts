@@ -69,9 +69,13 @@ export async function restockProduct(input: RestockInput): Promise<Result<Restoc
         await tx.$queryRaw`select 1 from "Product" where id = ${productId} for update`;
         const product = await tx.product.findUnique({
           where: { id: productId },
-          select: { stockQuantity: true },
+          select: { stockQuantity: true, archivedAt: true },
         });
         if (!product) throw new Refusal(fail("NOT_FOUND", "That product no longer exists."));
+        // Archived (discontinued) products can't be restocked until restored (FR-059).
+        if (product.archivedAt) {
+          throw new Refusal(fail("CONFLICT", "This product is archived. Restore it first."));
+        }
         if (product.stockQuantity + quantity > MAX_STOCK) {
           const message = `Stock can't go above ${MAX_STOCK.toLocaleString("en-PH")} units.`;
           throw new Refusal(fail("VALIDATION", message, { quantity: [message] }));

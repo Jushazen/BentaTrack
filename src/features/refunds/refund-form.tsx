@@ -1,7 +1,8 @@
 "use client";
 
 // FR-039/040: refund all or part of a sale. Each line takes a quantity up to what's still
-// refundable, and the money to return is previewed with the same rule the server uses. The
+// refundable and a "Return to stock" choice (on by default; off for damaged items, H4.2), and the
+// money to return is previewed with the same rule the server uses. A reason is required (H4.4). The
 // command id is kept until the refund succeeds, so pressing "Yes, refund" again after a dropped
 // connection can't refund twice. Offline, the refund is saved on this device and syncs later
 // (FR-034, leaf 6.2).
@@ -41,6 +42,8 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
   const commandId = useRef<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
+  /** Sale lines whose refunded units stay out of stock. Every other line goes back on the shelf. */
+  const [keptOut, setKeptOut] = useState<Record<string, boolean>>({});
 
   const refundable = items.filter((item) => left(item) > 0);
   const chosen = refundable
@@ -48,8 +51,12 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
     .filter(({ quantity }) => quantity > 0);
   const tooMany = chosen.some(({ item, quantity }) => quantity > left(item));
   const units = chosen.reduce((sum, { quantity }) => sum + quantity, 0);
+  const returnsToStock = (item: SaleLine) => Boolean(item.productId) && !keptOut[item.id];
   const restockUnits = chosen
-    .filter(({ item }) => item.productId)
+    .filter(({ item }) => returnsToStock(item))
+    .reduce((sum, { quantity }) => sum + quantity, 0);
+  const keptOutUnits = chosen
+    .filter(({ item }) => item.productId && keptOut[item.id])
     .reduce((sum, { quantity }) => sum + quantity, 0);
   const amount = tooMany
     ? 0
@@ -68,6 +75,11 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
     setQuantities((current) => ({ ...current, [id]: value }));
   }
 
+  function setReturnToStock(id: string, value: boolean) {
+    edited();
+    setKeptOut((current) => ({ ...current, [id]: !value }));
+  }
+
   function chooseAll() {
     edited();
     setQuantities(Object.fromEntries(refundable.map((item) => [item.id, String(left(item))])));
@@ -82,7 +94,11 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
           id,
           occurredAt: new Date().toISOString(),
           saleId,
-          items: chosen.map(({ item, quantity }) => ({ saleItemId: item.id, quantity })),
+          items: chosen.map(({ item, quantity }) => ({
+            saleItemId: item.id,
+            quantity,
+            returnToStock: returnsToStock(item),
+          })),
           note,
         }),
       {
@@ -93,6 +109,7 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
         onSuccess: (result) => {
           commandId.current = null;
           setQuantities({});
+          setKeptOut({});
           setNote("");
           clearErrors();
           if (!result.queued) router.refresh();
@@ -103,7 +120,11 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
 
   if (refundable.length === 0) return null;
   const unitsLabel = units === 1 ? "1 item" : `${units} items`;
-  const restockLabel = restockUnits === 1 ? "1 item" : `${restockUnits} items`;
+  const itemsLabel = (count: number) => (count === 1 ? "1 item" : `${count} items`);
+  const question =
+    `Return ${formatPeso(amount)} to the customer` +
+    (restockUnits > 0 ? ` and put ${itemsLabel(restockUnits)} back in stock?` : "?") +
+    (keptOutUnits > 0 ? ` ${itemsLabel(keptOutUnits)} won't go back in stock.` : "");
 
   return (
     <section aria-labelledby="refund-title" className="bg-surface space-y-4 rounded-lg p-4">
@@ -116,7 +137,8 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
         </Button>
       </div>
       <p className="text-muted text-sm">
-        Enter how many of each item the customer is returning. Returned items go back into stock.
+        Enter how many of each item the customer is returning. Returned items go back into stock;
+        untick &ldquo;Return to stock&rdquo; for damaged ones so they aren&apos;t sold again.
       </p>
 
       <ul aria-label="Items to refund" className="divide-border divide-y">
@@ -137,7 +159,18 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
                   {item.productCode} · {formatPeso(item.unitPrice)} each · {left(item)} of{" "}
                   {item.quantity} can be refunded
                 </p>
-                {!item.productId && (
+                {item.productId ? (
+                  <label className="text-text flex min-h-11 items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={!keptOut[item.id]}
+                      onChange={(event) => setReturnToStock(item.id, event.target.checked)}
+                      className="size-4"
+                    />
+                    Return to stock
+                    <span className="sr-only">: {item.productName}</span>
+                  </label>
+                ) : (
                   <p className="text-warn text-sm">Product deleted, stock not restored.</p>
                 )}
               </div>
@@ -170,8 +203,9 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
       <TextField
         label="Reason"
         name="note"
+        required
         maxLength={MAX_REFUND_NOTE}
-        placeholder="e.g. Wrong size"
+        placeholder="e.g. Wrong size, or damaged"
         value={note}
         onChange={(event) => {
           edited();
@@ -197,15 +231,11 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
         </p>
         {units > 0 && !tooMany ? (
           <ConfirmButton
-            key={`${amount}-${units}`}
+            key={`${amount}-${units}-${restockUnits}`}
             icon={Undo2}
             variant="primary"
             label={`Refund ${formatPeso(amount)}`}
-            question={
-              restockUnits > 0
-                ? `Return ${formatPeso(amount)} to the customer and put ${restockLabel} back in stock?`
-                : `Return ${formatPeso(amount)} to the customer?`
-            }
+            question={question}
             confirmLabel="Yes, refund"
             onConfirm={submit}
             pending={pending}

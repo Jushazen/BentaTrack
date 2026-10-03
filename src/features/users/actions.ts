@@ -3,10 +3,11 @@
 // Server actions (mutations): User account management (FR-044–046). Leaf 2.3.
 // Owner only (users.manage). Only STAFF accounts can be changed here, so the owner can never
 // lock themselves out. Deactivation takes effect on the user's next request, because
-// getCurrentUser() re-reads `active` from the database (src/lib/auth.ts).
+// getCurrentUser() re-reads `active` from the database (src/lib/auth.ts). A password reset also
+// ends the staff member's sessions on every device, so the old password's logins stop working.
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
-import { hashPassword, requireCapability } from "@/lib/auth";
+import { END_ALL_SESSIONS, hashPassword, requireCapability } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fail, invalid, ok, type Result } from "@/lib/result";
 import { userRowSelect, type UserRow } from "./queries";
@@ -60,7 +61,7 @@ async function findStaff(userId: string): Promise<Result<{ id: string }>> {
   return ok({ id: user.id });
 }
 
-/** FR-045: sets a new password for a staff account. */
+/** FR-045: sets a new password for a staff account and signs them out everywhere. */
 export async function resetUserPassword(input: ResetPasswordInput): Promise<Result<UserRow>> {
   const auth = await requireCapability("users.manage");
   if (!auth.ok) return auth;
@@ -71,7 +72,7 @@ export async function resetUserPassword(input: ResetPasswordInput): Promise<Resu
   if (!target.ok) return target;
   const user = await db.user.update({
     where: { id: target.data.id },
-    data: { passwordHash: await hashPassword(parsed.data.password) },
+    data: { passwordHash: await hashPassword(parsed.data.password), ...END_ALL_SESSIONS },
     select: userRowSelect,
   });
   revalidatePath(USERS_PATH);

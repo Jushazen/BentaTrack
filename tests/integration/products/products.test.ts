@@ -3,7 +3,12 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GET as getLocalImage } from "@/app/(app)/products/images/[file]/route";
 import { createSupplier } from "@/features/suppliers/actions";
-import { createProduct, deleteProduct, updateProduct } from "@/features/products/actions";
+import {
+  archiveProduct,
+  createProduct,
+  restoreProduct,
+  updateProduct,
+} from "@/features/products/actions";
 import { getProduct, listProducts } from "@/features/products/queries";
 import { db } from "@/lib/db";
 import { localUploadDir } from "@/lib/storage";
@@ -373,32 +378,34 @@ test("[EDIT-LOG] lowering stock into Low Stock returns a low-stock alert", async
   expect(unchanged.lowStockAlerts).toEqual([]); // already Low Stock
 });
 
-// ---- Delete (FR-004) --------------------------------------------------------------
+// ---- Archive (FR-004; full coverage in tests/integration/archive) ----------------------
 
-test("[FR-004] the owner deletes a discontinued product; its history keeps name and code", async () => {
+test("[FR-004] the owner archives a discontinued product instead of deleting it", async () => {
   const owner = await signInAs("OWNER");
   const { id } = unwrap(await createProduct(basics({ name: "Old Perfume", code: "PF-OLD" })));
 
-  expect(await deleteProduct({ id })).toEqual({ ok: true, data: { id, name: "Old Perfume" } });
-  expect(await db.product.count({ where: { id } })).toBe(0);
+  expect(await archiveProduct({ id })).toEqual({ ok: true, data: { id, name: "Old Perfume" } });
+  const archived = await db.product.findUniqueOrThrow({ where: { id } });
+  expect(archived.archivedAt).toBeInstanceOf(Date);
+  expect(archived.stockQuantity).toBe(12);
 
   const history = await db.inventoryChange.findMany({
     where: { productCode: "PF-OLD" },
     orderBy: { recordedAt: "asc" },
   });
   expect(history.map((h) => [h.type, h.quantityChange, h.stockAfter, h.productId])).toEqual([
-    ["EDIT", 12, 12, null],
-    ["REMOVAL", -12, 0, null],
+    ["EDIT", 12, 12, id],
+    ["ARCHIVE", 0, 12, id],
   ]);
   expect(history[1]).toMatchObject({ userId: owner.id, productName: "Old Perfume" });
-  expect(await deleteProduct({ id })).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
 });
 
-test("[FR-004-STAFF] staff can't delete products", async () => {
+test("[FR-004-STAFF] staff can't archive or restore products", async () => {
   const product = await makeProduct(categoryId);
   await signInAs("STAFF");
-  expect(await deleteProduct({ id: product.id })).toMatchObject(DENIED);
-  expect(await db.product.count({ where: { id: product.id } })).toBe(1);
+  expect(await archiveProduct({ id: product.id })).toMatchObject(DENIED);
+  expect(await restoreProduct({ id: product.id })).toMatchObject(DENIED);
+  expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).archivedAt).toBeNull();
 });
 
 test("[FR-004-STAFF] staff can't set or see purchase price or supplier", async () => {
@@ -533,7 +540,7 @@ test("[IMG-1] a product photo is stored on local disk and served to signed-in us
   expect((await getLocalImage(new Request(`http://test${imageUrl}`), ctx)).status).toBe(404);
 });
 
-test("[IMG-1] replacing, removing, or deleting a photo removes the old file", async () => {
+test("[IMG-1] replacing or removing a photo removes the old file; archiving keeps it", async () => {
   await signInAs("OWNER");
   const { id } = unwrap(await createProduct(basics({ image: png() })));
   const first = localFile((await db.product.findUniqueOrThrow({ where: { id } })).imageUrl);
@@ -557,8 +564,8 @@ test("[IMG-1] replacing, removing, or deleting a photo removes the old file", as
 
   unwrap(await updateProduct(basics({ id, stockWhenLoaded: "12", image: png() })));
   const third = localFile((await db.product.findUniqueOrThrow({ where: { id } })).imageUrl);
-  unwrap(await deleteProduct({ id }));
-  expect(existsSync(third)).toBe(false);
+  unwrap(await archiveProduct({ id }));
+  expect(existsSync(third)).toBe(true);
 });
 
 test("[IMG-1] files that aren't photos, or are too large, are refused", async () => {
@@ -598,6 +605,6 @@ test("[IMG-1] with a Blob token, photos go to Vercel Blob", async () => {
   );
   expect(imageUrl).toMatch(/^https:\/\/blob\.example\.test\/products\//);
 
-  unwrap(await deleteProduct({ id }));
+  unwrap(await updateProduct(basics({ id, stockWhenLoaded: "12", removeImage: "true" })));
   expect(blob.del).toHaveBeenCalledWith(imageUrl);
 });

@@ -118,7 +118,13 @@ export default async function SaleDetailPage({ params }: PageProps<"/sales/[id]"
                   <strong className="text-text">{formatPeso(refund.amount)}</strong>
                 </p>
                 <p className="text-text text-sm">
-                  {refund.items.map((item) => `${item.quantity} × ${item.productName}`).join(", ")}
+                  {refund.items
+                    .map(
+                      (item) =>
+                        `${item.quantity} × ${item.productName}` +
+                        (item.returnedToStock ? "" : " (not returned to stock)"),
+                    )
+                    .join(", ")}
                 </p>
                 {refund.note && <p className="text-muted text-sm break-words">{refund.note}</p>}
               </li>

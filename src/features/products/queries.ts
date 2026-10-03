@@ -1,6 +1,7 @@
 // Server-side reads: Product records (FR-001–006, FR-037). Leaf 3.2.
 // Staff never receive purchase prices or supplier details (FR-032, FR-042): those fields are
-// left out of the query itself, not just hidden in the UI.
+// left out of the query itself, not just hidden in the UI. Archived products are left out of the
+// list unless the owner asks for them (FR-057).
 import type { Prisma } from "@/generated/prisma/client";
 import { requireCapability, type SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -26,6 +27,8 @@ export type ProductListItem = {
   imageUrl: string | null;
   /** Owner only: no purchase price yet (A7 follow-on). Always false for staff. */
   needsCost: boolean;
+  /** Discontinued and archived (H1); can't be sold, restocked, or edited until restored. */
+  archived: boolean;
 };
 
 export type ProductPage = {
@@ -62,6 +65,7 @@ const listSelect = {
   stockQuantity: true,
   lowStockThreshold: true,
   imageUrl: true,
+  archivedAt: true,
   category: { select: { name: true } },
 } as const satisfies Prisma.ProductSelect;
 
@@ -73,9 +77,10 @@ function toListItem(
   row: Prisma.ProductGetPayload<{ select: typeof listSelect }> & { purchasePrice?: number | null },
   showCosts: boolean,
 ): ProductListItem {
-  const { category, purchasePrice, ...rest } = row;
+  const { category, purchasePrice, archivedAt, ...rest } = row;
   return {
     ...rest,
+    archived: archivedAt !== null,
     categoryName: category.name,
     status: stockStatus(row.stockQuantity, row.lowStockThreshold),
     needsCost: showCosts && purchasePrice === null,
@@ -90,7 +95,8 @@ export async function listProducts(rawFilters: unknown = {}): Promise<Result<Pro
   const filters = productFiltersSchema.parse(rawFilters ?? {});
   const page = filters.page ?? 1;
 
-  const where: Prisma.ProductWhereInput[] = [];
+  const showArchived = filters.archived === "1" && can(auth.data.role, "products.archive");
+  const where: Prisma.ProductWhereInput[] = [{ archivedAt: showArchived ? { not: null } : null }];
   if (filters.q) {
     where.push({
       OR: [
@@ -123,7 +129,7 @@ export async function listProducts(rawFilters: unknown = {}): Promise<Result<Pro
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / PRODUCT_PAGE_SIZE)),
-    filters,
+    filters: showArchived ? filters : { ...filters, archived: undefined },
   });
 }
 

@@ -4,7 +4,7 @@
 
 Web-based inventory and sales system for **Estetika**, a boutique in Calbayog City that currently uses a notebook and calculator. An Owner/Administrator and Inventory/Sales Staff use it on phones, tablets, and desktops, and it keeps working offline, syncing when back online.
 
-Full requirements are in `docs/SRS V2.pdf` as amended by `docs/SRS-V2-amendments.md` (amendments win). The build plan is in `.unlazy/bentatrack/PLAN.md`.
+Full requirements are in `docs/SRS_V2.1.docx`, the single source of truth. Make requirement changes directly in that file; there is no separate amendments file. The build plan is in `.unlazy/bentatrack/PLAN.md`.
 
 ## Tech stack
 
@@ -48,12 +48,12 @@ Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 �
 ## Domain terms
 
 - **Login:** by email address (unique, stored lowercase) and password (≥ 8 chars, bcrypt-hashed).
-- **Roles:** `OWNER` (full access) and `STAFF` (sales, refunds, restock, add/edit products; no delete, costs, suppliers, reports, categories, or users).
-- **Product status** (computed): Active, Low Stock (0 < qty ≤ threshold, default 5), Out of Stock (0). Out of stock ≠ discontinued; only the owner deletes discontinued products.
+- **Roles:** `OWNER` (full access) and `STAFF` (sales, refunds, restock, add/edit products; no archiving, costs, suppliers, reports, categories, or users).
+- **Product status** (computed): Active, Low Stock (0 < qty ≤ threshold, default 5), Out of Stock (0). Out of stock ≠ discontinued; only the owner archives discontinued products (`archivedAt`) and restores them. Products are never deleted; archived ones are hidden from selling, search, the offline catalog, and stock figures, and their codes stay reserved.
 - **Sale** has many **SaleItems**; whole-sale discount (amount or percent); payment `CASH` or `GCASH` only.
 - **Refund** returns stock and money for part or all of a sale. **Restock** adds received units.
-- **InventoryChange** logs `SALE | RESTOCK | EDIT | REFUND | REMOVAL` with user, delta, stock after, and product name/code snapshots.
-- **Offline:** sales, refunds, and restocks queue in an IndexedDB outbox and replay idempotently (client-generated UUIDs). Other edits need a connection.
+- **InventoryChange** logs `SALE | RESTOCK | EDIT | REFUND | ARCHIVE | RESTORE` with user, delta, stock after, and product name/code snapshots.
+- **Offline:** sales, refunds, and restocks queue in an IndexedDB outbox and replay idempotently (client-generated UUIDs). Other edits currently need a connection, but SRS v2.1 FR-049 now requires every feature to work offline (not built yet).
 
 ## Rules
 

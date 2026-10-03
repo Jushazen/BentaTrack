@@ -38,8 +38,7 @@ const REQUIRED = [
   "playwright.config.ts",
   "CLAUDE.md",
   "AGENTS.md",
-  "docs/SRS V2.pdf",
-  "docs/SRS-V2-amendments.md",
+  "docs/SRS_V2.1.docx",
   ".unlazy/bentatrack/PLAN.md",
 ];
 

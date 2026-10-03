@@ -112,26 +112,47 @@ test("[FR-003] a product is edited and the change shows immediately", async ({ p
   await expect(page.getByText("₱1,250.00")).toBeVisible();
 });
 
-test("[FR-004] only the owner deletes a discontinued product", async ({ page }, info) => {
+test("[FR-004] only the owner archives a discontinued product and restores it from the Archived filter", async ({
+  page,
+}, info) => {
   const name = `Old Perfume ${info.project.name}`;
-  const id = await insertProduct(name, `E2E-DEL-${info.project.name}`, 3);
+  const id = await insertProduct(name, `E2E-ARC-${info.project.name}`, 3);
 
   await logInAs(page, "staff");
   await page.goto(`/products/${id}`);
   await expect(page.getByRole("heading", { name })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Delete product" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Archive product" })).toHaveCount(0);
+  await page.goto("/products");
+  await expect(page.getByLabel(/Show archived/)).toHaveCount(0);
 
   await page.context().clearCookies();
   await logInAs(page, "owner");
   await page.goto(`/products/${id}`);
-  await page.getByRole("button", { name: "Delete product" }).click();
-  await expect(page.getByText(/Delete .* permanently\?/)).toBeVisible();
-  await page.getByRole("button", { name: "Yes, delete" }).click();
+  await page.getByRole("button", { name: "Archive product" }).click();
+  await expect(page.getByText(/Archive .*\? Only do this if it's discontinued/)).toBeVisible();
+  await page.getByRole("button", { name: "Yes, archive" }).click();
+  await expect(page.getByText(`${name} archived.`)).toBeVisible();
 
-  await expect(page.getByText(`${name} deleted.`)).toBeVisible();
-  await expect(page).toHaveURL(/\/products$/);
+  // Archived: read-only, gone from the normal list and from search.
+  await expect(page.getByText("Archived", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit product" })).toHaveCount(0);
+  await expect(page.getByRole("form", { name: `Restock ${name}` })).toHaveCount(0);
+  await page.goto(`/products/${id}/edit`);
+  await expect(page).toHaveURL(new RegExp(`/products/${id}$`));
   await page.goto(`/products?q=${encodeURIComponent(name)}`);
   await expect(productRow(page, name)).toHaveCount(0);
+
+  // The Archived filter lists it; restore it from there.
+  await page.getByLabel(/Show archived/).check();
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/archived=1/);
+  await productRow(page, name).getByRole("link").click();
+  await page.getByRole("button", { name: "Restore product" }).click();
+  await page.getByRole("button", { name: "Yes, restore" }).click();
+  await expect(page.getByText(`${name} restored.`)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit product" })).toBeVisible();
+  await page.goto(`/products?q=${encodeURIComponent(name)}`);
+  await expect(productRow(page, name)).toHaveCount(1);
 });
 
 test("[FR-006] a product at zero stock is kept and labelled Out of Stock", async ({

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Gloock, Inter } from "next/font/google";
+import { EARLY_INSTALL_SCRIPT } from "@/components/install/early-capture";
+import { InstallPromptListener } from "@/components/install/install-prompt-listener";
 import { Providers } from "@/components/layout/providers";
 import { ServiceWorkerProvider } from "@/components/offline/service-worker-provider";
 import "./globals.css";
@@ -30,7 +32,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${inter.variable} ${gloock.variable} h-full antialiased`}
     >
+      <head>
+        {/* Catches Chrome's one-time install offer before the app's scripts load (FR-061). */}
+        <script dangerouslySetInnerHTML={{ __html: EARLY_INSTALL_SCRIPT }} />
+      </head>
       <body className="min-h-full">
+        <InstallPromptListener />
         <ServiceWorkerProvider>
           <Providers>{children}</Providers>
         </ServiceWorkerProvider>

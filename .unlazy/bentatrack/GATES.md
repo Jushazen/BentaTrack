@@ -1,6 +1,6 @@
 # Gates: BentaTrack build (root)
 
-Scope: every SRS V2 requirement (as amended) is built, integrated, and verified, or visibly handed off
+Scope: every SRS v2.1 requirement (docs/SRS_V2.1.docx) is built, integrated, and verified, or visibly handed off
 
 Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeout 900 .unlazy/bentatrack/GATES.md`
 
@@ -10,7 +10,7 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
   EVIDENCE: pending
 
 - [ ] R1: setup leaf and every branch are reverified from their exact ledgers
-  CHECK: node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeout 900 --reverify --jobs 1 GATES.md .unlazy/bentatrack/gates/node-2.md .unlazy/bentatrack/gates/node-3.md .unlazy/bentatrack/gates/node-4.md .unlazy/bentatrack/gates/node-5.md .unlazy/bentatrack/gates/node-6.md .unlazy/bentatrack/gates/node-7.md
+  CHECK: node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeout 900 --reverify --jobs 1 GATES.md .unlazy/bentatrack/gates/node-2.md .unlazy/bentatrack/gates/node-3.md .unlazy/bentatrack/gates/node-4.md .unlazy/bentatrack/gates/node-5.md .unlazy/bentatrack/gates/node-6.md .unlazy/bentatrack/gates/node-7.md .unlazy/bentatrack/gates/node-8.md .unlazy/bentatrack/gates/node-9.md
   EXPECT: ALL MET
   EVIDENCE: pending
 

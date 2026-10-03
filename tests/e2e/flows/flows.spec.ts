@@ -55,7 +55,9 @@ function todaysNetSales(): Promise<number> {
       `select (select coalesce(sum(total), 0) from "Sale" where "occurredAt" >= $1 and "occurredAt" < $2)
             - (select coalesce(sum(amount), 0) from "Refund" where "occurredAt" >= $1 and "occurredAt" < $2)
          as net`,
-      [start, end],
+      // ISO strings: node-pg would send Dates as local time with an offset, which a timestamp
+      // (without time zone) column drops, shifting the day by the machine's UTC offset.
+      [start.toISOString(), end.toISOString()],
     );
     return Number(rows[0].net);
   });
@@ -134,7 +136,7 @@ test("[FLOW-SYSTEM] staff log in, scan and sell; stock, dashboard and reports sh
   await expect(best.getByRole("listitem").filter({ hasText: name })).toContainText("2 sold");
 });
 
-test("[FR-012] [NFR-SEC-2] a product's history shows its sale, restock, edit, refund and removal, each by the user who made it", async ({
+test("[FR-012] [NFR-SEC-2] a product's history shows its sale, restock, edit, refund and archiving, each by the user who made it", async ({
   page,
 }, info) => {
   const suffix = `${info.project.name}-${Date.now()}`;
@@ -176,24 +178,25 @@ test("[FR-012] [NFR-SEC-2] a product's history shows its sale, restock, edit, re
   });
   await page.goto(`/sales/${saleId}`);
   await page.getByLabel(/refund quantity$/).fill("1");
+  await page.getByLabel("Reason").fill("Wrong size");
   await page.getByRole("button", { name: "Refund ₱500.00" }).click();
   await page.getByRole("button", { name: "Yes, refund" }).click();
   await expect(page.getByText("Refunded ₱500.00. Give this back to the customer.")).toBeVisible();
 
-  // The owner deletes it as discontinued (14 → 0, then gone).
+  // The owner archives it as discontinued (stock kept at 14).
   await page.context().clearCookies();
   await logInAs(page, "owner");
   await page.goto(`/products/${id}`);
-  await page.getByRole("button", { name: "Delete product" }).click();
-  await page.getByRole("button", { name: "Yes, delete" }).click();
-  await expect(page.getByText(`${renamed} deleted.`)).toBeVisible();
+  await page.getByRole("button", { name: "Archive product" }).click();
+  await page.getByRole("button", { name: "Yes, archive" }).click();
+  await expect(page.getByText(`${renamed} archived.`)).toBeVisible();
 
-  // The history outlives the product: all five changes, newest first, each with who made it.
+  // The history is kept: all five changes, newest first, each with who made it.
   await page.goto(`/inventory-history?q=${encodeURIComponent(code)}`);
   const rows = page.getByRole("list", { name: "Inventory changes" }).getByRole("listitem");
   await expect(rows).toHaveCount(5);
   const expected = [
-    { type: "Removal", change: "-14", after: "0 in stock after", by: "By E2E Owner" },
+    { type: "Archive", change: "0", after: "14 in stock after", by: "By E2E Owner" },
     { type: "Refund", change: "+1", after: "14 in stock after", by: "By E2E Staff" },
     { type: "Edit", change: "0", after: "13 in stock after", by: "By E2E Staff" },
     { type: "Restock", change: "+5", after: "13 in stock after", by: "By E2E Staff" },
@@ -226,11 +229,11 @@ test("[FR-012] [NFR-SEC-2] a product's history shows its sale, restock, edit, re
   });
   const staff = E2E_USERS.staff.email;
   expect(saved.changes).toEqual([
-    { type: "SALE", email: staff, productId: null },
-    { type: "RESTOCK", email: staff, productId: null },
-    { type: "EDIT", email: staff, productId: null },
-    { type: "REFUND", email: staff, productId: null },
-    { type: "REMOVAL", email: E2E_USERS.owner.email, productId: null },
+    { type: "SALE", email: staff, productId: id },
+    { type: "RESTOCK", email: staff, productId: id },
+    { type: "EDIT", email: staff, productId: id },
+    { type: "REFUND", email: staff, productId: id },
+    { type: "ARCHIVE", email: E2E_USERS.owner.email, productId: id },
   ]);
   expect(saved.sale).toEqual([{ email: staff }]);
   expect(saved.refunds).toEqual([{ email: staff }]);

@@ -1,4 +1,4 @@
-// Zod input schemas: Sales history and refunds (FR-012, FR-039, FR-040; amendment C7). Leaf 4.2.
+// Zod input schemas: Sales history and refunds (FR-012, FR-039, FR-040; amendments C7, H4). Leaves 4.2, 8.4.
 // Refunding is an offline-capable command (FR-049): its payload is plain JSON with a
 // client-generated UUID and the time it happened, so a replay from the outbox is idempotent.
 import { z } from "zod";
@@ -15,6 +15,8 @@ const refundLineSchema = z.object({
     .number({ error: "Enter how many to refund." })
     .int("Enter a whole number.")
     .min(1, "Refund at least 1."),
+  /** H4.2: false when the units don't go back in stock, e.g. because they're damaged. */
+  returnToStock: z.boolean().default(true),
 });
 
 export const refundSaleSchema = z.object({
@@ -33,12 +35,12 @@ export const refundSaleSchema = z.object({
     .refine((items) => new Set(items.map((item) => item.saleItemId)).size === items.length, {
       error: "Each item can appear only once in a refund.",
     }),
+  // H4.4: the owner sees why every refund was given.
   note: z
-    .string()
+    .string({ error: "Enter the reason for this refund." })
     .trim()
-    .max(MAX_REFUND_NOTE, `Keep the reason under ${MAX_REFUND_NOTE} characters.`)
-    .nullish()
-    .transform((value) => value || null),
+    .min(1, "Enter the reason for this refund.")
+    .max(MAX_REFUND_NOTE, `Keep the reason under ${MAX_REFUND_NOTE} characters.`),
 });
 
 export type RefundSaleInput = z.input<typeof refundSaleSchema>;

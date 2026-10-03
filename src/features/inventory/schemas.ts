@@ -36,7 +36,14 @@ export const restockSchema = z.object({
 
 export type RestockInput = z.input<typeof restockSchema>;
 
-export const INVENTORY_CHANGE_TYPES = ["SALE", "RESTOCK", "EDIT", "REFUND", "REMOVAL"] as const;
+export const INVENTORY_CHANGE_TYPES = [
+  "SALE",
+  "RESTOCK",
+  "EDIT",
+  "REFUND",
+  "ARCHIVE",
+  "RESTORE",
+] as const;
 
 /** History filters from the page URL. Anything malformed is dropped rather than rejected. */
 export const historyFiltersSchema = z.object({

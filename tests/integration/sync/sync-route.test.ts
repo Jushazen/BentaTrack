@@ -145,6 +145,7 @@ test("[SYNC-ORDER] a sale and its refund recorded offline sync in order; out of 
       occurredAt: new Date().toISOString(),
       saleId: saleBody.input.id,
       items: [{ saleItemId: randomUUID(), quantity: 1 }],
+      note: "Wrong size",
     },
   });
   expect(refundFirst.result).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
@@ -161,6 +162,7 @@ test("[SYNC-ORDER] a sale and its refund recorded offline sync in order; out of 
       occurredAt: new Date().toISOString(),
       saleId: saleBody.input.id,
       items: [{ saleItemId: line.id, quantity: 1 }],
+      note: "Wrong size",
     },
   });
   expect(data<{ amount: number }>(refund.result).amount).toBe(10_000);

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, test, vi } from "vitest";
-import { deleteProduct } from "@/features/products/actions";
+import { archiveProduct } from "@/features/products/actions";
 import { refundSale, type RefundResult } from "@/features/refunds/actions";
 import { getSale, listSales } from "@/features/refunds/queries";
 import { refundAmounts } from "@/features/refunds/refund-math";
@@ -56,16 +56,22 @@ async function sell(lines: [Line, number][], extra: Partial<RecordSaleInput> = {
   return { saleId: sale.id, total: sale.total, lineOf };
 }
 
+/** Refunds `items` as [saleItemId, quantity, returnToStock?]; the reason defaults to "Wrong size". */
 function refund(
   saleId: string,
-  items: [saleItemId: string, quantity: number][],
+  items: [saleItemId: string, quantity: number, returnToStock?: boolean][],
   extra: Partial<RefundSaleInput> = {},
 ): Promise<Result<RefundResult>> {
   return refundSale({
     id: randomUUID(),
     occurredAt: new Date().toISOString(),
     saleId,
-    items: items.map(([saleItemId, quantity]) => ({ saleItemId, quantity })),
+    items: items.map(([saleItemId, quantity, returnToStock]) => ({
+      saleItemId,
+      quantity,
+      returnToStock,
+    })),
+    note: "Wrong size",
     ...extra,
   });
 }
@@ -153,7 +159,7 @@ test("[FR-039] refund shares always sum to the sale total, whatever the order", 
   }
 });
 
-test("[FR-039] a line whose product was deleted is refunded in money only", async () => {
+test("[FR-039-ARCHIVED] units refunded for an archived product go back to its stock; it stays archived", async () => {
   await signInAs("OWNER");
   const gone = await makeProduct(categoryId, { sellingPrice: 20_000, stockQuantity: 4 });
   const kept = await makeProduct(categoryId, { sellingPrice: 10_000, stockQuantity: 4 });
@@ -162,7 +168,7 @@ test("[FR-039] a line whose product was deleted is refunded in money only", asyn
     [kept, 1],
   ]);
   const goneLine = sale.lineOf(gone);
-  unwrap(await deleteProduct({ id: gone.id }));
+  unwrap(await archiveProduct({ id: gone.id }));
 
   const result = unwrap(
     await refund(sale.saleId, [
@@ -173,13 +179,133 @@ test("[FR-039] a line whose product was deleted is refunded in money only", asyn
 
   expect(result.amount).toBe(30_000);
   expect(await stockOf(kept.id)).toBe(4);
+  expect(await stockOf(gone.id)).toBe(4);
+  const archived = await db.product.findUniqueOrThrow({ where: { id: gone.id } });
+  expect(archived.archivedAt).not.toBeNull();
   const logged = await db.inventoryChange.findMany({ where: { refundId: result.id } });
-  expect(logged.map((c) => c.productId)).toEqual([kept.id]);
+  expect(logged.map((c) => c.productId).sort()).toEqual([gone.id, kept.id].sort());
   const detail = unwrap(await getSale(sale.saleId));
   expect(detail.items.find((i) => i.id === goneLine)).toMatchObject({
-    productId: null,
+    productId: gone.id,
     refundedQuantity: 1,
   });
+});
+
+test("[FR-039-NO-RESTOCK] units not returned to stock are refunded and logged with no stock change", async () => {
+  const staff = await signInAs("STAFF");
+  const tote = await makeProduct(categoryId, { name: "Canvas Tote", sellingPrice: 50_000 });
+  const fan = await makeProduct(categoryId, { name: "Pandan Fan", sellingPrice: 20_000 });
+  const sale = await sell([
+    [tote, 2],
+    [fan, 3],
+  ]);
+  expect(await stockOf(tote.id)).toBe(8);
+  expect(await stockOf(fan.id)).toBe(7);
+
+  const result = unwrap(
+    await refund(
+      sale.saleId,
+      [
+        [sale.lineOf(tote), 1, true],
+        [sale.lineOf(fan), 2, false],
+      ],
+      { note: "Fan arrived torn" },
+    ),
+  );
+
+  // The money comes back for both; only the tote goes back on the shelf.
+  expect(result).toMatchObject({ amount: 90_000, itemCount: 3 });
+  expect(await stockOf(tote.id)).toBe(9);
+  expect(await stockOf(fan.id)).toBe(7);
+  const saved = await db.refundItem.findMany({ where: { refundId: result.id } });
+  expect(
+    saved.map((i) => ({ saleItemId: i.saleItemId, quantity: i.quantity, back: i.returnedToStock })),
+  ).toEqual(
+    expect.arrayContaining([
+      { saleItemId: sale.lineOf(tote), quantity: 1, back: true },
+      { saleItemId: sale.lineOf(fan), quantity: 2, back: false },
+    ]),
+  );
+  const fanLine = await db.saleItem.findUniqueOrThrow({ where: { id: sale.lineOf(fan) } });
+  expect(fanLine.refundedQuantity).toBe(2);
+
+  // Both are logged as Refund; the kept-out fan with a change of 0 and the reason.
+  const changes = await db.inventoryChange.findMany({ where: { refundId: result.id } });
+  expect(changes).toHaveLength(2);
+  expect(changes.find((c) => c.productId === tote.id)).toMatchObject({
+    type: "REFUND",
+    quantityChange: 1,
+    stockAfter: 9,
+    note: "Fan arrived torn",
+  });
+  expect(changes.find((c) => c.productId === fan.id)).toMatchObject({
+    type: "REFUND",
+    quantityChange: 0,
+    stockAfter: 7,
+    userId: staff.id,
+    note: "2 not returned to stock: Fan arrived torn",
+  });
+
+  // Leaving the choice out means the units go back (the default).
+  unwrap(await refund(sale.saleId, [[sale.lineOf(fan), 1]]));
+  expect(await stockOf(fan.id)).toBe(8);
+
+  const detail = unwrap(await getSale(sale.saleId));
+  expect(detail.refunds[0].items).toEqual(
+    expect.arrayContaining([
+      { productName: "Pandan Fan", quantity: 2, returnedToStock: false },
+      { productName: "Canvas Tote", quantity: 1, returnedToStock: true },
+    ]),
+  );
+});
+
+test("[FR-040-DATE] a refund dated before its sale is refused and changes nothing", async () => {
+  await signInAs("STAFF");
+  const tote = await makeProduct(categoryId, { stockQuantity: 10 });
+  const soldAt = new Date("2026-09-20T02:30:00.000Z");
+  const sale = await sell([[tote, 2]], { occurredAt: soldAt.toISOString() });
+
+  const early = await refund(sale.saleId, [[sale.lineOf(tote), 1]], {
+    occurredAt: new Date(soldAt.getTime() - 60_000).toISOString(),
+  });
+
+  expect(early.ok).toBe(false);
+  if (!early.ok) {
+    expect(early.error.code).toBe("VALIDATION");
+    expect(early.error.message).toBe(
+      "A refund can't be dated before its sale. Check the device's date and time.",
+    );
+  }
+  expect(await db.refund.count()).toBe(0);
+  expect(await stockOf(tote.id)).toBe(8);
+
+  // The same moment as the sale, or later, is fine.
+  unwrap(await refund(sale.saleId, [[sale.lineOf(tote), 1]], { occurredAt: soldAt.toISOString() }));
+  expect(await stockOf(tote.id)).toBe(9);
+});
+
+test("[REFUND-REASON] a refund without a reason is refused", async () => {
+  await signInAs("STAFF");
+  const tote = await makeProduct(categoryId, { stockQuantity: 10 });
+  const sale = await sell([[tote, 2]]);
+
+  for (const note of [undefined, null, "", "   "]) {
+    const result = await refund(sale.saleId, [[sale.lineOf(tote), 1]], {
+      note: note as string,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION");
+      expect(result.error.fieldErrors?.note).toEqual(["Enter the reason for this refund."]);
+    }
+  }
+  expect(await db.refund.count()).toBe(0);
+  expect(await stockOf(tote.id)).toBe(8);
+
+  const saved = unwrap(
+    await refund(sale.saleId, [[sale.lineOf(tote), 1]], { note: "  Too small " }),
+  );
+  expect((await db.refund.findUniqueOrThrow({ where: { id: saved.id } })).note).toBe("Too small");
 });
 
 test("[FR-040] a line can't be refunded for more than was sold, even across several refunds", async () => {
@@ -268,10 +394,13 @@ test("[FR-012-REFUND] each refunded product gets a REFUND history entry linked t
   const staff = await signInAs("STAFF");
   const tote = await makeProduct(categoryId, { name: "Canvas Tote", code: "TOTE-1" });
   const fan = await makeProduct(categoryId, { name: "Pandan Fan", code: "FAN-1" });
-  const sale = await sell([
-    [tote, 2],
-    [fan, 3],
-  ]);
+  const sale = await sell(
+    [
+      [tote, 2],
+      [fan, 3],
+    ],
+    { occurredAt: "2026-09-19T08:00:00.000Z" },
+  );
   const occurredAt = "2026-09-20T02:30:00.000Z";
 
   const result = unwrap(
@@ -341,6 +470,7 @@ test("[REFUND-IDEMPOTENT] replaying the same refund id returns the first result 
     occurredAt: new Date().toISOString(),
     saleId: sale.saleId,
     items: [{ saleItemId: sale.lineOf(tote), quantity: 1 }],
+    note: "Wrong size",
   };
 
   const first = unwrap(await refundSale(command));

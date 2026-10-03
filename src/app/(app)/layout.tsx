@@ -7,10 +7,10 @@ import { SyncStatus } from "@/components/sync/sync-status";
 import { requirePageCapability } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-/** Products that are Low Stock or Out of Stock (quantity at or below their own threshold). */
+/** Products in use that are Low Stock or Out of Stock; archived ones are left out (FR-057). */
 async function lowStockCount(): Promise<number> {
   return db.product.count({
-    where: { stockQuantity: { lte: db.product.fields.lowStockThreshold } },
+    where: { archivedAt: null, stockQuantity: { lte: db.product.fields.lowStockThreshold } },
   });
 }
 

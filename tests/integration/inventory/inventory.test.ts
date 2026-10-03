@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, expect, test, vi } from "vitest";
 import { restockProduct } from "@/features/inventory/actions";
 import { listInventoryChanges } from "@/features/inventory/queries";
-import { deleteProduct } from "@/features/products/actions";
+import { archiveProduct } from "@/features/products/actions";
 import { db } from "@/lib/db";
 import { makeCategory, makeProduct, makeUser, resetTestDatabase } from "../helpers/db";
 
@@ -179,11 +179,11 @@ test("[FR-012-RESTOCK] history lists a product's restocks newest first and survi
   expect(unwrap(await listInventoryChanges({ type: "RESTOCK" })).total).toBe(3);
   expect(unwrap(await listInventoryChanges({ q: "sh-1" })).items).toHaveLength(1);
 
-  // Deleting the product keeps its history, found by the name snapshot.
-  unwrap(await deleteProduct({ id: product.id }));
-  const afterDelete = unwrap(await listInventoryChanges({ q: "beaded" }));
-  expect(afterDelete.items.map((e) => e.type)).toEqual(["REMOVAL", "RESTOCK", "RESTOCK"]);
-  expect(afterDelete.items.every((e) => e.productId === null)).toBe(true);
+  // Archiving the product keeps its history, still linked to it (H1).
+  unwrap(await archiveProduct({ id: product.id }));
+  const afterArchive = unwrap(await listInventoryChanges({ q: "beaded" }));
+  expect(afterArchive.items.map((e) => e.type)).toEqual(["ARCHIVE", "RESTOCK", "RESTOCK"]);
+  expect(afterArchive.items.every((e) => e.productId === product.id)).toBe(true);
 });
 
 test("[FR-012-RESTOCK] staff can read history; malformed filters are ignored", async () => {

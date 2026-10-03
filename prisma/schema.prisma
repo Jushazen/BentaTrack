@@ -1,4 +1,4 @@
-// BentaTrack data model: SRS §6.1 as amended by docs/SRS-V2-amendments.md section C.
+// BentaTrack data model: SRS v2.1 §6.1 (docs/SRS_V2.1.docx).
 // Money is stored as integer centavos (₱150.50 = 15050). Times are UTC.
 
 generator client {
@@ -30,19 +30,23 @@ enum InventoryChangeType {
   RESTOCK
   EDIT
   REFUND
-  REMOVAL
+  /// H1: products are archived and restored, never deleted (FR-004, FR-058).
+  ARCHIVE
+  RESTORE
 }
 
 /// FR-030–033, FR-044–046. Email is stored lowercase.
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  role         Role
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  passwordHash   String
+  role           Role
+  active         Boolean  @default(true)
+  /// Copied into each login's session; raising it ends every session of this user (FR-060, FR-045).
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   sales            Sale[]
   refunds          Refund[]
@@ -74,6 +78,7 @@ model Supplier {
 }
 
 /// FR-002, FR-037. Status (Active / Low Stock / Out of Stock) is computed, not stored.
+/// Discontinued products are archived (archivedAt set), never deleted (H1, FR-004, FR-057–059).
 model Product {
   id                String    @id @default(cuid())
   name              String
@@ -92,6 +97,8 @@ model Product {
   lowStockThreshold Int       @default(5)
   expirationDate    DateTime? @db.Date
   imageUrl          String?
+  /// When the owner archived it; null for products in use (C1, H1).
+  archivedAt        DateTime?
   /// "Date added" in the SRS.
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -131,7 +138,7 @@ model Sale {
   @@index([staffId])
 }
 
-/// One line of a sale. Product name/code are copied so history survives deletion (A2).
+/// One line of a sale. Product name/code are copied so history shows the name used at the time (A2).
 model SaleItem {
   id               String   @id @default(cuid())
   saleId           String   @db.Uuid
@@ -164,6 +171,7 @@ model Refund {
   user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   /// Centavos returned to the customer.
   amount     Int
+  /// The refund reason (H4.4). Required for every new refund; the column stays nullable.
   note       String?
 
   items            RefundItem[]
@@ -174,14 +182,16 @@ model Refund {
 }
 
 model RefundItem {
-  id         String   @id @default(cuid())
-  refundId   String   @db.Uuid
-  refund     Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
-  saleItemId String
-  saleItem   SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
-  quantity   Int
+  id              String   @id @default(cuid())
+  refundId        String   @db.Uuid
+  refund          Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  saleItemId      String
+  saleItem        SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  quantity        Int
   /// Centavos.
-  amount     Int
+  amount          Int
+  /// H4.2: false when the units were not put back in stock (e.g. damaged).
+  returnedToStock Boolean  @default(true)
 
   @@index([refundId])
   @@index([saleItemId])

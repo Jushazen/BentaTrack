@@ -1,8 +1,10 @@
 "use server";
 
-// Server actions (mutations): Refunds (FR-012, FR-039, FR-040; amendment C7). Leaf 4.2.
+// Server actions (mutations): Refunds (FR-012, FR-039, FR-040; amendments C7, H4). Leaves 4.2, 8.4.
 // refundSale is idempotent by its client-generated id (FR-036): the Refund row uses that id, so
 // replaying the same refund returns the first result without returning stock or money twice.
+// Each item is either returned to stock (the default) or not, e.g. when damaged (H4.2); an
+// archived product gets its units back and stays archived (H4.3).
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { requireCapability } from "@/lib/auth";
@@ -66,6 +68,7 @@ export async function refundSale(input: RefundSaleInput): Promise<Result<RefundR
         const sale = await tx.sale.findUniqueOrThrow({
           where: { id: saleId },
           select: {
+            occurredAt: true,
             subtotal: true,
             total: true,
             items: {
@@ -80,12 +83,25 @@ export async function refundSale(input: RefundSaleInput): Promise<Result<RefundR
             },
           },
         });
+        // H4.1: a wrong device clock must not put a refund before its sale in reports.
+        if (occurredAt < sale.occurredAt) {
+          throw new Refusal(
+            fail(
+              "VALIDATION",
+              "A refund can't be dated before its sale. Check the device's date and time.",
+            ),
+          );
+        }
         const byId = new Map(sale.items.map((item) => [item.id, item]));
 
         // Report every problem at once so the whole form can be fixed in one go.
         const problems: Record<string, string[]> = {};
-        const lines: { item: (typeof sale.items)[number]; quantity: number }[] = [];
-        for (const { saleItemId, quantity } of items) {
+        const lines: {
+          item: (typeof sale.items)[number];
+          quantity: number;
+          returnToStock: boolean;
+        }[] = [];
+        for (const { saleItemId, quantity, returnToStock } of items) {
           const item = byId.get(saleItemId);
           if (!item) {
             problems[refundLineKey(saleItemId)] = ["This item isn't part of this sale."];
@@ -99,7 +115,8 @@ export async function refundSale(input: RefundSaleInput): Promise<Result<RefundR
                 : `Only ${left} of ${item.productName} can still be refunded.`,
             ];
           }
-          lines.push({ item, quantity });
+          // A product no longer on record has no stock to return to.
+          lines.push({ item, quantity, returnToStock: returnToStock && Boolean(item.productId) });
         }
         if (Object.keys(problems).length > 0) {
           throw new Refusal(fail("CONFLICT", "You can't refund more than was sold.", problems));
@@ -124,23 +141,25 @@ export async function refundSale(input: RefundSaleInput): Promise<Result<RefundR
             amount,
             note,
             items: {
-              create: lines.map(({ item, quantity }, index) => ({
+              create: lines.map(({ item, quantity, returnToStock }, index) => ({
                 saleItemId: item.id,
                 quantity,
                 amount: amounts[index],
+                returnedToStock: returnToStock,
               })),
             },
           },
         });
 
-        // Products still in the catalogue get their units back, locked in a fixed order.
-        // A line whose product was deleted is refunded in money only: there's no stock to restore.
-        const restocked = lines
+        // Every product still on record (archived ones too) gets a REFUND history entry, locked in
+        // a fixed order. Only units returned to stock raise its stock; the rest are logged as 0.
+        // A line whose product no longer exists is refunded in money only.
+        const logged = lines
           .filter((line): line is typeof line & { item: { productId: string } } =>
             Boolean(line.item.productId),
           )
           .sort((a, b) => a.item.productId.localeCompare(b.item.productId));
-        productIds = restocked.map((line) => line.item.productId);
+        productIds = logged.map((line) => line.item.productId);
         if (productIds.length > 0) {
           await tx.$queryRaw`
             select 1 from "Product" where id in (${Prisma.join(productIds)}) order by id for update`;
@@ -152,20 +171,22 @@ export async function refundSale(input: RefundSaleInput): Promise<Result<RefundR
             data: { refundedQuantity: { increment: quantity } },
           });
         }
-        for (const { item, quantity } of restocked) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stockQuantity: { increment: quantity } },
-          });
+        for (const { item, quantity, returnToStock } of logged) {
+          if (returnToStock) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stockQuantity: { increment: quantity } },
+            });
+          }
           await recordInventoryChange(tx, {
             productId: item.productId,
             type: "REFUND",
-            quantityChange: quantity,
+            quantityChange: returnToStock ? quantity : 0,
             userId: auth.data.id,
             occurredAt,
             saleId,
             refundId: id,
-            note: note ?? undefined,
+            note: returnToStock ? note : `${quantity} not returned to stock: ${note}`,
           });
         }
 

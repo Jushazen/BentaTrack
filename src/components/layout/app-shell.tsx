@@ -7,6 +7,7 @@ import { Ellipsis, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { InstallAppButton } from "@/components/install/install-app-button";
 import type { Role } from "@/generated/prisma/enums";
 import {
   PHONE_TAB_HREFS,
@@ -95,13 +96,16 @@ function NavGroups({
   );
 }
 
-function AccountBlock({ user }: { user: ShellUser }) {
+/** `install`: also offer "Install app" here. Only the phone sheet does; on desktop it sits in
+ * the top bar, because the sidebar has no spare height on a 720px-tall laptop screen. */
+function AccountBlock({ user, install = false }: { user: ShellUser; install?: boolean }) {
   return (
     <div className="border-border space-y-1 border-t pt-3">
       <p className="px-3 pb-1 text-sm">
         <span className="text-text font-medium">{user.name}</span>
         <span className="text-muted"> · {ROLE_LABEL[user.role]}</span>
       </p>
+      {install && <InstallAppButton />}
       <ThemeToggle className="lg:min-h-10" />
       <SignOutButton className="lg:min-h-10" />
     </div>
@@ -156,7 +160,7 @@ function MoreSheet({
       >
         <NavGroups groups={groups} pathname={pathname} lowStock={lowStock} />
         <div className="mt-3">
-          <AccountBlock user={user} />
+          <AccountBlock user={user} install />
         </div>
       </nav>
     </dialog>
@@ -217,8 +221,11 @@ export function AppShell({
             </span>
             {label}
           </p>
-          <div id="shell-status" className="ml-auto">
-            {status}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="hidden lg:block">
+              <InstallAppButton className="lg:min-h-10" />
+            </div>
+            <div id="shell-status">{status}</div>
           </div>
         </header>
 

@@ -1,6 +1,6 @@
 # Gates: project setup (PLAN leaf 1.1)
 
-OWNS: package.json, package-lock.json, .gitignore, .env.example, docker-compose.yml, eslint.config.mjs, tsconfig.json, next.config.ts, postcss.config.mjs, .prettierrc.json, .prettierignore, vitest.config.mts, playwright.config.ts, prisma.config.ts, prisma/**, src/**, tests/**, scripts/gates/**, scripts/plan/**, public/**, docs/SRS-V2-amendments.md, .unlazy/bentatrack/**, AGENTS.md, CLAUDE.md, GATES.md
+OWNS: package.json, package-lock.json, .gitignore, .env.example, docker-compose.yml, eslint.config.mjs, tsconfig.json, next.config.ts, postcss.config.mjs, .prettierrc.json, .prettierignore, vitest.config.mts, playwright.config.ts, prisma.config.ts, prisma/**, src/**, tests/**, scripts/gates/**, scripts/plan/**, public/**, docs/SRS_V2.1.docx, .unlazy/bentatrack/**, AGENTS.md, CLAUDE.md, GATES.md
 
 Scope: a Next.js 16 + Prisma 7 project whose dependencies install cleanly and which type-checks, lints, formats, builds, starts, and runs tests with no feature logic yet.
 
