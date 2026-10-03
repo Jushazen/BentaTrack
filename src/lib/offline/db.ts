@@ -1,29 +1,38 @@
-// On-device database (IndexedDB via Dexie) for offline use (§4.9, §5.3). Leaf 6.1.
-// - products: a copy of the catalog, so search and barcode lookup work without a connection.
-// - meta: small key/value facts, e.g. when the catalog was last refreshed.
-// - outbox: sales, refunds, and restocks waiting to be sent to the server (filled by leaf 6.2).
+// On-device database (IndexedDB via Dexie) for offline use (§4.9, §5.3, FR-055).
+// - products, categories, suppliers, users, sales, refunds, inventoryChanges: a copy of every
+//   record the signed-in user may see (leaf 9.1; products only in leaf 6.1). Kept up to date by
+//   ./catalog.ts from the role-scoped snapshot in ./snapshot.ts. Staff devices never hold
+//   suppliers, users, purchase prices, or sale-line costs.
+// - meta: small key/value facts, e.g. the snapshot cursor and whose data the device holds.
+// - outbox: changes waiting to be sent to the server (leaf 6.2). Never cleared by a snapshot or a
+//   sign-out: nothing recorded offline may be lost (FR-036).
 // Browser only: import from client components or client-side modules, never from the server.
 import Dexie, { type EntityTable } from "dexie";
+import type {
+  SnapshotCategory,
+  SnapshotInventoryChange,
+  SnapshotProduct,
+  SnapshotRefund,
+  SnapshotSale,
+  SnapshotSupplier,
+  SnapshotUser,
+} from "./snapshot";
 
 export const OFFLINE_DB_NAME = "bentatrack";
 
-/** One product as the offline catalog keeps it. Same fields as a search hit, no costs. */
-export type CatalogProduct = {
-  id: string;
-  name: string;
-  code: string;
-  barcode: string | null;
-  brand: string | null;
-  categoryName: string;
-  sellingPrice: number;
-  stockQuantity: number;
-  lowStockThreshold: number;
-  imageUrl: string | null;
-  /** Lower-cased copies for case-insensitive matching and indexed exact lookups. */
+/** One product as the device keeps it: the snapshot row plus lower-cased copies for matching. */
+export type CatalogProduct = SnapshotProduct & {
   nameLower: string;
   codeLower: string;
   barcodeLower: string | null;
 };
+
+export type DeviceCategory = SnapshotCategory;
+export type DeviceSupplier = SnapshotSupplier;
+export type DeviceUser = SnapshotUser;
+export type DeviceSale = SnapshotSale;
+export type DeviceRefund = SnapshotRefund;
+export type DeviceInventoryChange = SnapshotInventoryChange;
 
 export type MetaEntry = { key: string; value: string };
 
@@ -42,9 +51,26 @@ export type OutboxEntry = {
 
 export type OfflineDb = Dexie & {
   products: EntityTable<CatalogProduct, "id">;
+  categories: EntityTable<DeviceCategory, "id">;
+  suppliers: EntityTable<DeviceSupplier, "id">;
+  users: EntityTable<DeviceUser, "id">;
+  sales: EntityTable<DeviceSale, "id">;
+  refunds: EntityTable<DeviceRefund, "id">;
+  inventoryChanges: EntityTable<DeviceInventoryChange, "id">;
   meta: EntityTable<MetaEntry, "key">;
   outbox: EntityTable<OutboxEntry, "id">;
 };
+
+/** Values for the fields leaf 6.1's product-only catalog didn't keep. */
+export const PRODUCT_DEFAULTS = {
+  categoryId: "",
+  supplierId: null,
+  purchasePrice: null,
+  expirationDate: null,
+  archivedAt: null,
+  createdAt: new Date(0).toISOString(),
+  updatedAt: new Date(0).toISOString(),
+} as const satisfies Partial<SnapshotProduct>;
 
 export function openOfflineDb(name = OFFLINE_DB_NAME): OfflineDb {
   const db = new Dexie(name) as OfflineDb;
@@ -53,6 +79,26 @@ export function openOfflineDb(name = OFFLINE_DB_NAME): OfflineDb {
     meta: "key",
     outbox: "id, createdAt",
   });
+  // Leaf 9.1. The old catalog stays searchable offline until the first full snapshot replaces it
+  // (the device has no snapshot cursor yet, so its next sync is a full one).
+  db.version(2)
+    .stores({
+      products: "id, codeLower, barcodeLower, categoryId",
+      categories: "id",
+      suppliers: "id",
+      users: "id",
+      sales: "id, occurredAt",
+      refunds: "id, saleId, occurredAt",
+      inventoryChanges: "id, productId, occurredAt",
+    })
+    .upgrade((tx) =>
+      tx
+        .table("products")
+        .toCollection()
+        .modify((product: Record<string, unknown>) => {
+          for (const [key, value] of Object.entries(PRODUCT_DEFAULTS)) product[key] ??= value;
+        }),
+    );
   return db;
 }
 

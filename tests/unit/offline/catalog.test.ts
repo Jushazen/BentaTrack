@@ -116,7 +116,23 @@ test("[OFFLINE-DB] refreshCatalog stores the server snapshot and keeps the old c
   expect(await refreshCatalog(db)).toBe(false);
   expect(await db.products.count()).toBe(1);
 
-  const fresh = { products: [entry({ id: "b", name: "Pandan Fan", code: "FAN-1" })] };
+  // The leaf 9.1 snapshot: the products plus every other table, here empty.
+  const fresh = {
+    version: 1,
+    full: true,
+    cursor: new Date().toISOString(),
+    user: { id: "u-staff", role: "STAFF" },
+    products: [{ ...entry({ id: "b", name: "Pandan Fan", code: "FAN-1" }), categoryId: "c" }],
+    categories: [],
+    categoryIds: [],
+    suppliers: [],
+    supplierIds: [],
+    users: [],
+    userIds: [],
+    sales: [],
+    refunds: [],
+    inventoryChanges: [],
+  };
   const fetchMock = vi.fn().mockResolvedValue(Response.json(fresh));
   vi.stubGlobal("fetch", fetchMock);
   expect(await refreshCatalog(db)).toBe(true);

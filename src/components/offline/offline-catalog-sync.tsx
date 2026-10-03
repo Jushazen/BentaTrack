@@ -1,8 +1,10 @@
 "use client";
 
-// Keeps this device ready to work offline while a user is signed in (FR-050, leaf 6.1):
-// - refreshes the offline product catalog when the app opens, when the connection comes back,
-//   and when the app returns to the foreground after a while;
+// Keeps this device ready to work offline while a user is signed in (FR-050, FR-055; leaves
+// 6.1 and 9.1):
+// - asks the browser to keep the device data even after days without use;
+// - refreshes the device's copy of everything the user may see when the app opens, when the
+//   connection comes back, and when the app returns to the foreground after a while;
 // - asks the service worker to save the pages used offline, so they reload without a
 //   connection even if the user never opened them on this device;
 // - asks it to save every page opened through the app's own links as well. Those only fetch
@@ -10,7 +12,11 @@
 import { useSerwist } from "@serwist/turbopack/react";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { catalogSyncedAt, refreshCatalog } from "@/lib/offline/catalog";
+import {
+  catalogSyncedAt,
+  requestPersistentStorage,
+  syncDeviceData,
+} from "@/lib/offline/catalog";
 
 /** Pages every signed-in user may need offline. Owner-only pages are saved only when visited. */
 const OFFLINE_PAGES = ["/dashboard", "/checkout", "/sales", "/products"];
@@ -31,7 +37,7 @@ export function OfflineCatalogSync() {
           const syncedAt = await catalogSyncedAt();
           if (syncedAt && Date.now() - syncedAt.getTime() < STALE_AFTER_MS) return;
         }
-        await refreshCatalog();
+        await syncDeviceData();
       } catch {
         // IndexedDB unavailable (e.g. private mode) or a bad reply: keep working online only.
       } finally {
@@ -44,6 +50,7 @@ export function OfflineCatalogSync() {
       if (document.visibilityState === "visible") void refresh(true);
     };
 
+    void requestPersistentStorage();
     void refresh(false);
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisible);

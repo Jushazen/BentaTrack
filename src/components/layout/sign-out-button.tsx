@@ -2,12 +2,23 @@
 
 import { LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { purgeOwnerData } from "@/lib/offline/catalog";
+
+/** Owner-only data leaves the device before the session ends (FR-055, leaf 9.1). */
+async function signOutAndPurge() {
+  try {
+    await purgeOwnerData();
+  } catch {
+    // No IndexedDB here (e.g. private mode), so nothing was stored.
+  }
+  await signOut({ callbackUrl: "/login" });
+}
 
 export function SignOutButton({ className = "" }: { className?: string }) {
   return (
     <button
       type="button"
-      onClick={() => signOut({ callbackUrl: "/login" })}
+      onClick={() => void signOutAndPurge()}
       className={`text-text hover:bg-secondary flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left ${className}`}
     >
       <LogOut aria-hidden className="text-muted size-5 shrink-0" strokeWidth={1.75} />
