@@ -2,10 +2,12 @@
 
 // Server actions (mutations): Owner-only supplier records (FR-041–042). Leaf 3.3.
 // Deleting a supplier keeps its products; their supplier link is cleared (onDelete: SetNull).
+// Each change can also come from a device through /api/sync (leaf 9.4) with its own UUID; it is
+// then applied at most once, and a replay returns the first result.
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { requireCapability } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { findReceipt, runWithReceipt } from "@/lib/commands";
 import { fail, invalid, ok, type Result } from "@/lib/result";
 import { supplierRowSelect, toSupplierRow, type SupplierRow } from "./queries";
 import {
@@ -36,10 +38,18 @@ export async function createSupplier(input: SupplierInput): Promise<Result<Suppl
   const parsed = createSupplierSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error.issues);
 
+  const earlier = await findReceipt<SupplierRow>(parsed.data.id);
+  if (earlier) return ok(earlier);
   try {
-    const supplier = await db.supplier.create({ data: parsed.data, select: supplierRowSelect });
+    const outcome = await runWithReceipt(
+      parsed.data.id,
+      "SUPPLIER_CREATE",
+      auth.data.id,
+      async (tx) =>
+        toSupplierRow(await tx.supplier.create({ data: parsed.data, select: supplierRowSelect })),
+    );
     revalidatePath(SUPPLIERS_PATH);
-    return ok(toSupplierRow(supplier));
+    return ok(outcome.result);
   } catch (err) {
     return unexpected(err);
   }
@@ -50,12 +60,16 @@ export async function updateSupplier(input: UpdateSupplierInput): Promise<Result
   if (!auth.ok) return auth;
   const parsed = updateSupplierSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error.issues);
-  const { id, ...data } = parsed.data;
+  const { id, commandId, ...data } = parsed.data;
 
+  const earlier = await findReceipt<SupplierRow>(commandId);
+  if (earlier) return ok(earlier);
   try {
-    const supplier = await db.supplier.update({ where: { id }, data, select: supplierRowSelect });
+    const outcome = await runWithReceipt(commandId, "SUPPLIER_UPDATE", auth.data.id, async (tx) =>
+      toSupplierRow(await tx.supplier.update({ where: { id }, data, select: supplierRowSelect })),
+    );
     revalidatePath(SUPPLIERS_PATH);
-    return ok(toSupplierRow(supplier));
+    return ok(outcome.result);
   } catch (err) {
     if (isNotFound(err)) return fail("NOT_FOUND", GONE);
     return unexpected(err);
@@ -70,16 +84,18 @@ export async function deleteSupplier(
   if (!auth.ok) return auth;
   const parsed = deleteSupplierSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error.issues);
-  const { id } = parsed.data;
+  const { id, commandId } = parsed.data;
 
+  const earlier = await findReceipt<{ id: string; productsUnlinked: number }>(commandId);
+  if (earlier) return ok(earlier);
   try {
-    const productsUnlinked = await db.$transaction(async (tx) => {
-      const count = await tx.product.count({ where: { supplierId: id } });
+    const outcome = await runWithReceipt(commandId, "SUPPLIER_DELETE", auth.data.id, async (tx) => {
+      const productsUnlinked = await tx.product.count({ where: { supplierId: id } });
       await tx.supplier.delete({ where: { id } });
-      return count;
+      return { id, productsUnlinked };
     });
     revalidatePath(SUPPLIERS_PATH);
-    return ok({ id, productsUnlinked });
+    return ok(outcome.result);
   } catch (err) {
     if (isNotFound(err)) return fail("NOT_FOUND", GONE);
     return unexpected(err);

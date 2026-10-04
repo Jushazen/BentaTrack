@@ -64,3 +64,40 @@ function isRetryable(err: unknown): boolean {
   const sqlState = meta?.driverAdapterError?.cause?.originalCode;
   return sqlState === "40001" || sqlState === "40P01";
 }
+
+// ---- Receipts (leaf 9.4) --------------------------------------------------------------
+// Product, category, and supplier changes don't create a record keyed by the command id (an
+// edit, a rename, a delete), so each writes a CommandReceipt instead, in the same transaction.
+
+/** The earlier result of command `id`, or null if it was never applied. */
+export async function findReceipt<T>(id: string | undefined, tx: Tx = db): Promise<T | null> {
+  if (!id) return null;
+  const receipt = await tx.commandReceipt.findUnique({ where: { id }, select: { result: true } });
+  return receipt ? (receipt.result as T) : null;
+}
+
+/**
+ * Runs `work` in a transaction. With a command id it runs at most once: the result is stored in
+ * a receipt keyed by the id, and a replay gets that result back. Without one (a direct call that
+ * didn't come from a device) it simply runs. `work` may throw to roll back; no receipt is kept
+ * then, so a refused change can be retried later.
+ */
+export async function runWithReceipt<T>(
+  commandId: string | undefined,
+  kind: string,
+  userId: string,
+  work: (tx: Tx) => Promise<T>,
+): Promise<CommandOutcome<T>> {
+  if (!commandId) return { replayed: false, result: await db.$transaction(work) };
+  return runIdempotent({
+    id: commandId,
+    findExisting: (tx, id) => findReceipt<T>(id, tx),
+    apply: async (tx, id) => {
+      const result = await work(tx);
+      await tx.commandReceipt.create({
+        data: { id, kind, userId, result: result as Prisma.InputJsonValue },
+      });
+      return result;
+    },
+  });
+}

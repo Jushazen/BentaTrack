@@ -36,7 +36,21 @@ export type DeviceInventoryChange = SnapshotInventoryChange;
 
 export type MetaEntry = { key: string; value: string };
 
-export type OutboxKind = "SALE" | "REFUND" | "RESTOCK";
+/** Sales, refunds, and restocks (leaf 6.2); product, category, and supplier changes (leaf 9.4). */
+export type OutboxKind =
+  | "SALE"
+  | "REFUND"
+  | "RESTOCK"
+  | "PRODUCT_CREATE"
+  | "PRODUCT_UPDATE"
+  | "PRODUCT_ARCHIVE"
+  | "PRODUCT_RESTORE"
+  | "CATEGORY_CREATE"
+  | "CATEGORY_RENAME"
+  | "CATEGORY_DELETE"
+  | "SUPPLIER_CREATE"
+  | "SUPPLIER_UPDATE"
+  | "SUPPLIER_DELETE";
 
 /** A change recorded offline. `id` is the client-generated UUID the server uses to de-duplicate. */
 export type OutboxEntry = {

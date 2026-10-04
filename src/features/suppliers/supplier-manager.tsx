@@ -2,14 +2,24 @@
 
 // FR-041: owner adds, edits, and deletes supplier records. Deleting a supplier keeps its
 // products and clears their supplier, and the confirmation says how many that affects.
+// Changes save through the outbox, so they work offline too (leaf 9.4). Online the page is
+// reloaded from the server after each change; offline the device's copy redraws by itself.
 import { Mail, MapPin, Pencil, Phone, Plus, Save, Trash2, User, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
-import { createSupplier, deleteSupplier, updateSupplier } from "./actions";
+import { runCommand } from "@/lib/offline/sync";
 import type { SupplierRow } from "./queries";
+
+const QUEUED = "It's saved on this device and will sync when you're back online.";
+
+/** Adds the offline note to a success message when the change was queued. */
+function said(message: string, result: { queued: boolean }): string {
+  return result.queued ? `${message} ${QUEUED}` : message;
+}
 
 type SupplierFormProps = {
   supplier?: SupplierRow;
@@ -18,7 +28,10 @@ type SupplierFormProps = {
 
 /** Add form when `supplier` is missing, edit form otherwise. */
 function SupplierForm({ supplier, onDone }: SupplierFormProps) {
+  const router = useRouter();
   const { pending, fieldErrors, run } = useResultAction();
+  /** The new supplier's id, kept across retries of one save so it is never added twice. */
+  const newId = useRef<string | null>(null);
   const editing = supplier !== undefined;
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -32,15 +45,26 @@ function SupplierForm({ supplier, onDone }: SupplierFormProps) {
       email: String(data.get("email") ?? ""),
       address: String(data.get("address") ?? ""),
     };
+    const name = fields.name.trim();
     if (editing) {
-      run(() => updateSupplier({ id: supplier.id, ...fields }), {
-        success: (saved) => `Saved ${saved.name}.`,
-        onSuccess: onDone,
+      const commandId = crypto.randomUUID();
+      run(() => runCommand("SUPPLIER_UPDATE", { id: supplier.id, commandId, ...fields }), {
+        success: (result) => said(`Saved ${name}.`, result),
+        onSuccess: (result) => {
+          onDone?.();
+          if (!result.queued) router.refresh();
+        },
       });
     } else {
-      run(() => createSupplier(fields), {
-        success: (saved) => `Supplier ${saved.name} added.`,
-        onSuccess: () => form.reset(),
+      newId.current ??= crypto.randomUUID();
+      const id = newId.current;
+      run(() => runCommand("SUPPLIER_CREATE", { id, ...fields }), {
+        success: (result) => said(`Supplier ${name} added.`, result),
+        onSuccess: (result) => {
+          newId.current = null;
+          form.reset();
+          if (!result.queued) router.refresh();
+        },
       });
     }
   }
@@ -120,6 +144,7 @@ function Detail({
 }
 
 function SupplierItem({ supplier }: { supplier: SupplierRow }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const { pending, run } = useResultAction();
   const count = supplier.productCount;
@@ -161,9 +186,19 @@ function SupplierItem({ supplier }: { supplier: SupplierRow }) {
           confirmLabel="Yes, delete"
           pending={pending}
           onConfirm={() =>
-            run(() => deleteSupplier({ id: supplier.id }), {
-              success: `Supplier ${supplier.name} deleted.`,
-            })
+            run(
+              () =>
+                runCommand("SUPPLIER_DELETE", {
+                  id: supplier.id,
+                  commandId: crypto.randomUUID(),
+                }),
+              {
+                success: (result) => said(`Supplier ${supplier.name} deleted.`, result),
+                onSuccess: (result) => {
+                  if (!result.queued) router.refresh();
+                },
+              },
+            )
           }
         />
       </div>

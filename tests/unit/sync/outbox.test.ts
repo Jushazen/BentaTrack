@@ -368,15 +368,13 @@ test("[FR-049] input the server would reject is refused on the device, never que
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test("[FR-049] only sales, refunds, and restocks can be queued", async () => {
+test("[FR-049] only known kinds of change can be queued", async () => {
   setOnline(false);
   const fetchMock = fakeServer("network-error");
-  // A product edit is not a command: the type system and the runtime both refuse it.
-  // @ts-expect-error PRODUCT_UPDATE is not an offline-capable command
-  const reply = await runCommand("PRODUCT_UPDATE", { id: randomUUID(), name: "Tote" }, db);
-  expect(reply).toEqual(
-    fail("VALIDATION", "Only sales, refunds, and restocks can be saved offline."),
-  );
+  // Products are never deleted (FR-004): the type system and the runtime both refuse it.
+  // @ts-expect-error PRODUCT_DELETE is not a command
+  const reply = await runCommand("PRODUCT_DELETE", { id: randomUUID(), name: "Tote" }, db);
+  expect(reply).toEqual(fail("VALIDATION", "This change can't be saved offline."));
   expect(await outboxEntries(db)).toEqual([]);
   expect(fetchMock).not.toHaveBeenCalled();
 });

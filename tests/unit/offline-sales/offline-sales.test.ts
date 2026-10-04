@@ -243,7 +243,7 @@ test("[FR-049-REFUND-UNSYNCED] a sale recorded offline can be refunded before it
   expect(withPending(await records(), "OWNER").waiting).toBe(2);
 });
 
-test("[FR-049-REFUND-UNSYNCED] online, a refund of a sale still waiting to sync waits behind it, and the replay sends the sale first", async () => {
+test("[FR-049-REFUND-UNSYNCED] online, a refund of a sale still waiting to sync goes after it: the sale is sent first", async () => {
   setOnline(false);
   const input = saleInput();
   await runCommand("SALE", input, db);
@@ -257,19 +257,18 @@ test("[FR-049-REFUND-UNSYNCED] online, a refund of a sale still waiting to sync 
   vi.stubGlobal("fetch", fetchMock);
 
   const refund = refundInput(input.id, [{ productId: "fan", quantity: 1, returnToStock: false }]);
-  expect(await runCommand("REFUND", refund, db)).toEqual({ ok: true, data: { queued: true } });
-  // Not sent on its own: the server doesn't know the sale yet.
-  expect(fetchMock).not.toHaveBeenCalled();
-  // Kept out of stock (damaged), so the device's stock doesn't move.
-  expect((await db.products.get("fan"))?.stockQuantity).toBe(1);
-
-  const report = await flushOutbox({ db });
-  expect(report.synced.map((row) => row.kind)).toEqual(["SALE", "REFUND"]);
+  // Never sent on its own (the server doesn't know the sale yet): the queue goes first, in order,
+  // and the form gets the server's answer for the refund (leaf 9.4).
+  const reply = await runCommand("REFUND", refund, db);
+  expect(reply).toMatchObject({ ok: true, data: { id: refund.id, queued: false } });
   expect(sent.map((body) => [body.kind, body.input.id])).toEqual([
     ["SALE", input.id],
     ["REFUND", refund.id],
   ]);
+  // Kept out of stock (damaged), so the device's stock doesn't move.
+  expect((await db.products.get("fan"))?.stockQuantity).toBe(1);
   expect(await outboxEntries(db)).toEqual([]);
+  expect((await flushOutbox({ db })).synced).toEqual([]);
 });
 
 test("[FR-049-REFUND-UNSYNCED] a refund of a synced sale returns its units to the device's stock", async () => {

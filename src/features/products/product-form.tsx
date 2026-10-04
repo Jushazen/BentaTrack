@@ -3,6 +3,8 @@
 // Add and edit product form (FR-001–003, FR-037). Owner-only fields (purchase price, supplier)
 // are rendered, and therefore sent, only when `suppliers` is given (FR-032, A7 follow-on).
 // Photos are shrunk in the browser first: server actions accept at most 1 MB per request.
+// Saves through the outbox (leaf 9.4), so it works offline too: the change and its photo wait on
+// the device and sync later, and the product shows on this device straight away.
 import { Plus, Save, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -11,6 +13,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -20,8 +23,9 @@ import { showLowStockAlerts } from "@/components/layout/low-stock-alerts";
 import { buttonClasses, Button } from "@/components/ui/button";
 import { inputClasses, TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
-import { createProduct, updateProduct } from "./actions";
+import { runCommand } from "@/lib/offline/sync";
 import type { ProductDetail } from "./queries";
+import type { CommandImage } from "./schemas";
 
 type Option = { id: string; name: string };
 
@@ -65,6 +69,18 @@ async function shrinkImage(file: File, acceptedTypes: string): Promise<File> {
     return file;
   }
 }
+
+/** The photo as a data: URL, so it can wait in the outbox and travel as JSON. */
+function toCommandImage(file: File): Promise<CommandImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ name: file.name, dataUrl: String(reader.result) });
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+const QUEUED = "It's saved on this device and will sync when you're back online.";
 
 function SelectField({
   label,
@@ -213,6 +229,9 @@ export function ProductForm({ product, categories, suppliers, imageRules }: Prod
   const { pending, fieldErrors, run } = useResultAction();
   const [photo, setPhoto] = useState<File | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
+  /** Kept across retries of one save, so a resend is never applied twice. */
+  const newProductId = useRef<string | null>(null);
+  const commandId = useRef<string | null>(null);
   const editing = product !== undefined;
   const photoTooLarge = photo !== null && photo.size > imageRules.maxBytes;
   const photoErrors = photoTooLarge
@@ -222,26 +241,41 @@ export function ProductForm({ product, categories, suppliers, imageRules }: Prod
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (photoTooLarge) return;
-    const data = new FormData(event.currentTarget);
-    if (photo) data.set("image", photo, photo.name);
+    const fields: Record<string, string> = {};
+    for (const [key, value] of new FormData(event.currentTarget)) {
+      if (typeof value === "string") fields[key] = value;
+    }
+    const name = fields.name?.trim() || "The product";
     const openProduct = (id: string) => router.push(`/products/${id}`);
+    const occurredAt = new Date().toISOString();
+    const image = async () => (photo ? toCommandImage(photo) : null);
 
     if (editing) {
-      data.set("id", product.id);
-      data.set("stockWhenLoaded", String(product.stockQuantity));
-      if (removeImage && !photo) data.set("removeImage", "true");
-      run(() => updateProduct(data), {
-        success: (saved) => `Saved ${saved.name}.`,
+      fields.stockWhenLoaded = String(product.stockQuantity);
+      if (removeImage && !photo) fields.removeImage = "true";
+      commandId.current ??= crypto.randomUUID();
+      const command = { id: product.id, commandId: commandId.current, occurredAt, fields };
+      run(async () => runCommand("PRODUCT_UPDATE", { ...command, image: await image() }), {
+        success: (saved) => (saved.queued ? `Saved ${name}. ${QUEUED}` : `Saved ${saved.name}.`),
         onSuccess: (saved) => {
-          showLowStockAlerts(saved.lowStockAlerts, openProduct);
-          openProduct(saved.id);
+          commandId.current = null;
+          if (!saved.queued) showLowStockAlerts(saved.lowStockAlerts, openProduct);
+          openProduct(product.id);
         },
       });
     } else {
-      run(() => createProduct(data), {
-        success: (saved) => `${saved.name} added.`,
-        onSuccess: (saved) => openProduct(saved.id),
-      });
+      newProductId.current ??= crypto.randomUUID();
+      const id = newProductId.current;
+      run(
+        async () => runCommand("PRODUCT_CREATE", { id, occurredAt, fields, image: await image() }),
+        {
+          success: (saved) => (saved.queued ? `${name} added. ${QUEUED}` : `${saved.name} added.`),
+          onSuccess: () => {
+            newProductId.current = null;
+            openProduct(id);
+          },
+        },
+      );
     }
   }
 

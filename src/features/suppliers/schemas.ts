@@ -21,6 +21,13 @@ const optionalEmail = z
   );
 
 const id = z.string().min(1, "Missing supplier.");
+/**
+ * Sent from a device (leaf 9.4): the change's client-generated UUID, so a replay is applied once.
+ * Adding: the new supplier's id, so a product edited offline can name it before it syncs.
+ */
+const commandId = z
+  .uuid({ error: "This change is missing its id. Reload and try again." })
+  .optional();
 
 const supplierFields = {
   name: z.string().trim().min(1, "Enter the supplier's name.").max(120, "Name is too long."),
@@ -30,9 +37,9 @@ const supplierFields = {
   address: optionalText(300),
 };
 
-export const createSupplierSchema = z.object(supplierFields);
-export const updateSupplierSchema = z.object({ id, ...supplierFields });
-export const deleteSupplierSchema = z.object({ id });
+export const createSupplierSchema = z.object({ id: commandId, ...supplierFields });
+export const updateSupplierSchema = z.object({ id, commandId, ...supplierFields });
+export const deleteSupplierSchema = z.object({ id, commandId });
 
 export type SupplierInput = z.input<typeof createSupplierSchema>;
 export type UpdateSupplierInput = z.input<typeof updateSupplierSchema>;

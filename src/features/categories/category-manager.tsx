@@ -2,25 +2,44 @@
 
 // FR-043: owner adds, renames, and deletes categories. A category that still has products shows
 // why it can't be deleted instead of a Delete button (the server refuses it either way).
+// Changes save through the outbox, so they work offline too (leaf 9.4). Online the page is
+// reloaded from the server after each change; offline the device's copy redraws by itself.
 import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
-import { createCategory, deleteCategory, renameCategory } from "./actions";
+import { runCommand } from "@/lib/offline/sync";
 import type { CategoryRow } from "./queries";
 
+const QUEUED = "It's saved on this device and will sync when you're back online.";
+
+/** Adds the offline note to a success message when the change was queued. */
+function said(message: string, result: { queued: boolean }): string {
+  return result.queued ? `${message} ${QUEUED}` : message;
+}
+
 function AddCategoryForm() {
+  const router = useRouter();
   const { pending, fieldErrors, run } = useResultAction();
+  /** The new category's id, kept across retries of one save so it is never added twice. */
+  const newId = useRef<string | null>(null);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const name = String(new FormData(form).get("name") ?? "");
-    run(() => createCategory({ name }), {
-      success: (category) => `Category “${category.name}” added.`,
-      onSuccess: () => form.reset(),
+    newId.current ??= crypto.randomUUID();
+    const id = newId.current;
+    run(() => runCommand("CATEGORY_CREATE", { id, name }), {
+      success: (result) => said(`Category “${name.trim()}” added.`, result),
+      onSuccess: (result) => {
+        newId.current = null;
+        form.reset();
+        if (!result.queued) router.refresh();
+      },
     });
   }
 
@@ -48,14 +67,19 @@ function AddCategoryForm() {
 }
 
 function RenameForm({ category, onDone }: { category: CategoryRow; onDone: () => void }) {
+  const router = useRouter();
   const { pending, fieldErrors, run } = useResultAction();
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = String(new FormData(event.currentTarget).get("name") ?? "");
-    run(() => renameCategory({ id: category.id, name }), {
-      success: (renamed) => `Renamed to “${renamed.name}”.`,
-      onSuccess: onDone,
+    const commandId = crypto.randomUUID();
+    run(() => runCommand("CATEGORY_RENAME", { id: category.id, commandId, name }), {
+      success: (result) => said(`Renamed to “${name.trim()}”.`, result),
+      onSuccess: (result) => {
+        onDone();
+        if (!result.queued) router.refresh();
+      },
     });
   }
 
@@ -83,6 +107,7 @@ function RenameForm({ category, onDone }: { category: CategoryRow; onDone: () =>
 }
 
 function CategoryItem({ category }: { category: CategoryRow }) {
+  const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const { pending, run } = useResultAction();
   const count = category.productCount;
@@ -115,9 +140,19 @@ function CategoryItem({ category }: { category: CategoryRow }) {
             confirmLabel="Yes, delete"
             pending={pending}
             onConfirm={() =>
-              run(() => deleteCategory({ id: category.id }), {
-                success: `Category “${category.name}” deleted.`,
-              })
+              run(
+                () =>
+                  runCommand("CATEGORY_DELETE", {
+                    id: category.id,
+                    commandId: crypto.randomUUID(),
+                  }),
+                {
+                  success: (result) => said(`Category “${category.name}” deleted.`, result),
+                  onSuccess: (result) => {
+                    if (!result.queued) router.refresh();
+                  },
+                },
+              )
             }
           />
         ) : (

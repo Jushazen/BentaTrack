@@ -12,6 +12,7 @@ import type { CatalogEntry, SearchHit } from "@/features/search/queries";
 import type { Role } from "@/generated/prisma/client";
 import { stockStatus } from "@/lib/stock-status";
 import { offlineDb, PRODUCT_DEFAULTS, type CatalogProduct, type OfflineDb } from "./db";
+import { reapplyOutbox } from "./outbox";
 import { SNAPSHOT_VERSION, type Snapshot, type SnapshotProduct } from "./snapshot";
 
 // Same limits as the server search (SEARCH_LIMIT, MAX_QUERY_LENGTH). Not imported from there,
@@ -102,14 +103,15 @@ function snapshotTables(db: OfflineDb) {
 /**
  * Stores a snapshot, all or nothing. A full one replaces every stored record (the outbox is
  * never touched); a partial one adds or updates the changed rows and drops categories,
- * suppliers, and users that no longer exist.
+ * suppliers, and users that no longer exist. Changes still waiting in the outbox are then
+ * applied again where the snapshot overwrote them, so the device keeps showing them (leaf 9.4).
  */
 export async function applySnapshot(
   snapshot: Snapshot,
   syncedAt: Date = new Date(),
   db: OfflineDb = offlineDb(),
 ): Promise<void> {
-  await db.transaction("rw", snapshotTables(db), async () => {
+  await db.transaction("rw", [...snapshotTables(db), db.outbox], async () => {
     if (snapshot.full) {
       await Promise.all(snapshotTables(db).map((table) => table.clear()));
     }
@@ -140,6 +142,12 @@ export async function applySnapshot(
       }
     }
 
+    await reapplyOutbox(
+      db,
+      snapshot.full ? "all" : new Set(snapshot.products.map((product) => product.id)),
+      snapshot.user.role,
+    );
+
     await db.meta.bulkPut([
       { key: META.syncedAt, value: syncedAt.toISOString() },
       { key: META.cursor, value: snapshot.cursor },
@@ -147,6 +155,14 @@ export async function applySnapshot(
       { key: META.role, value: snapshot.user.role },
     ]);
   });
+}
+
+/**
+ * Makes the next download a full one (leaf 9.4). Called when a change is refused or discarded:
+ * the device still shows what it did, and only a full snapshot replaces every record it touched.
+ */
+export async function forgetSnapshotCursor(db: OfflineDb = offlineDb()): Promise<void> {
+  await db.meta.delete(META.cursor);
 }
 
 async function dropMissing(table: OfflineDb["categories" | "suppliers" | "users"], ids: string[]) {

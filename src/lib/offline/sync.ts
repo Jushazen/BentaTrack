@@ -1,25 +1,50 @@
 // Sending offline-capable commands and replaying the outbox (FR-034–036, FR-049, §3.4). Leaf 6.2.
-// runCommand() is how the checkout, refund, and restock forms save: the command is written to
-// the outbox first, then sent to /api/sync. No answer (offline, timeout, server down) leaves it
-// queued; any answer settles it. flushOutbox() later sends what is queued, oldest first. Every
-// command carries its client-generated UUID, so sending one twice never applies it twice.
-// Only sales, refunds, and restocks go through here; every other edit needs a connection.
-// A refund of a sale that hasn't synced yet always waits in the outbox behind it (leaf 9.3).
+// runCommand() is how every form that changes data saves: sales, refunds, and restocks (leaf
+// 6.2), and products, categories, and suppliers (leaf 9.4). The command is written to the outbox
+// first, then sent to /api/sync. No answer (offline, timeout, server down) leaves it queued; any
+// answer settles it. flushOutbox() later sends what is queued, oldest first. Every command
+// carries its client-generated UUID, so sending one twice never applies it twice.
+// A change that needs something still waiting in the outbox (a refund of an unsynced sale, a
+// product in a category added offline) waits behind it, so the server gets them in order.
 // Browser only.
 import type { LowStockAlert } from "@/components/layout/low-stock-alerts";
+import {
+  createCategorySchema,
+  deleteCategorySchema,
+  renameCategorySchema,
+} from "@/features/categories/schemas";
 import { restockSchema } from "@/features/inventory/schemas";
+import {
+  createProductSchema,
+  dataUrlToFile,
+  productIdSchema,
+  updateProductSchema,
+  type ProductCommand,
+} from "@/features/products/schemas";
 import { refundSaleSchema } from "@/features/refunds/schemas";
 import { recordSaleSchema } from "@/features/sales/schemas";
+import {
+  createSupplierSchema,
+  deleteSupplierSchema,
+  updateSupplierSchema,
+} from "@/features/suppliers/schemas";
+import { can } from "@/lib/permissions";
 import { fail, invalid, ok, type ErrorCode, type Result } from "@/lib/result";
+import { forgetSnapshotCursor } from "./catalog";
 import { offlineDb, type OfflineDb } from "./db";
 import {
-  applyToCatalog,
+  applyToDevice,
+  checkOnDevice,
+  COMMAND_CAPABILITY,
+  COMMAND_KINDS,
+  commandIdOf,
   countAttempt,
   enqueue,
   markRefused,
   outboxEntries,
   readEntry,
   removeEntry,
+  waitsBehind,
   type CommandInputs,
   type CommandKind,
   type CommandResults,
@@ -32,14 +57,68 @@ const SEND_TIMEOUT_MS = 20_000;
 const OFFLINE_MESSAGE = "Couldn't reach the server. Check your connection and try again.";
 /** Serializes outbox replays across this device's open tabs. */
 const LOCK_NAME = "bentatrack-outbox";
+/** Dispatched on window when a change is queued, so the sync indicator sends it when it can. */
+export const OUTBOX_QUEUED_EVENT = "bentatrack:outbox-queued";
+/** Same rule as isCommandId() in src/lib/commands.ts, which only the server can load. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type Queued = { queued: true };
 export type Sent<K extends CommandKind> = CommandResults[K] & { queued: false };
 /** What a form gets back: the server's answer, or word that it was saved to sync later. */
 export type CommandReply<K extends CommandKind> = Result<Sent<K> | Queued>;
 
-/** The same schemas the server parses with, so a bad entry is caught before it is queued. */
-const SCHEMAS = { SALE: recordSaleSchema, REFUND: refundSaleSchema, RESTOCK: restockSchema };
+type Issues = readonly { path: readonly PropertyKey[]; message: string }[];
+
+/** A product command as the form object its schema parses, with the photo as a File again. */
+function productForm(command: ProductCommand, extra: Record<string, unknown> = {}) {
+  const image = command.image ? dataUrlToFile(command.image) : undefined;
+  return { ...command.fields, ...extra, id: command.id, occurredAt: command.occurredAt, image };
+}
+
+/**
+ * The same schemas the server parses with, so a bad entry is caught before it is queued. Each
+ * returns the problems, or null when there are none.
+ */
+const VALIDATORS: { [K in CommandKind]: (input: CommandInputs[K]) => Issues | null } = {
+  SALE: (input) => recordSaleSchema.safeParse(input).error?.issues ?? null,
+  REFUND: (input) => refundSaleSchema.safeParse(input).error?.issues ?? null,
+  RESTOCK: (input) => restockSchema.safeParse(input).error?.issues ?? null,
+  PRODUCT_CREATE: (input) =>
+    createProductSchema.safeParse(productForm(input)).error?.issues ?? null,
+  PRODUCT_UPDATE: (input) =>
+    updateProductSchema.safeParse(productForm(input, { commandId: input.commandId })).error
+      ?.issues ?? null,
+  PRODUCT_ARCHIVE: (input) => productIdSchema.safeParse(input).error?.issues ?? null,
+  PRODUCT_RESTORE: (input) => productIdSchema.safeParse(input).error?.issues ?? null,
+  CATEGORY_CREATE: (input) => createCategorySchema.safeParse(input).error?.issues ?? null,
+  CATEGORY_RENAME: (input) => renameCategorySchema.safeParse(input).error?.issues ?? null,
+  CATEGORY_DELETE: (input) => deleteCategorySchema.safeParse(input).error?.issues ?? null,
+  SUPPLIER_CREATE: (input) => createSupplierSchema.safeParse(input).error?.issues ?? null,
+  SUPPLIER_UPDATE: (input) => updateSupplierSchema.safeParse(input).error?.issues ?? null,
+  SUPPLIER_DELETE: (input) => deleteSupplierSchema.safeParse(input).error?.issues ?? null,
+};
+
+/** What the server would refuse for the signed-in role (FR-032); null if it is allowed. */
+function forbiddenFor<K extends CommandKind>(
+  kind: K,
+  input: CommandInputs[K],
+  user: SyncUser | null,
+): Result<never> | null {
+  if (!user?.role) return null;
+  if (!can(user.role, COMMAND_CAPABILITY[kind])) {
+    return fail("FORBIDDEN", "You don't have access to that.");
+  }
+  if (kind === "PRODUCT_CREATE" || kind === "PRODUCT_UPDATE") {
+    const { fields } = input as ProductCommand;
+    if (fields.purchasePrice !== undefined && !can(user.role, "products.cost")) {
+      return fail("FORBIDDEN", "Only the owner can set purchase prices.");
+    }
+    if (fields.supplierId !== undefined && !can(user.role, "suppliers.read")) {
+      return fail("FORBIDDEN", "Only the owner can set a product's supplier.");
+    }
+  }
+  return null;
+}
 
 let currentUser: SyncUser | null = null;
 /** Entries being sent by runCommand right now; a replay leaves them alone. */
@@ -121,40 +200,48 @@ async function quietly(work: Promise<unknown>): Promise<void> {
   }
 }
 
-/** True for a refund whose sale is still in the outbox. */
-async function waitsForItsSale<K extends CommandKind>(
+async function waitsInLine<K extends CommandKind>(
   kind: K,
   input: CommandInputs[K],
   db: OfflineDb,
 ): Promise<boolean> {
-  if (kind !== "REFUND") return false;
   try {
-    const sale = await db.outbox.get((input as CommandInputs["REFUND"]).saleId);
-    return sale?.kind === "SALE";
+    return await waitsBehind(kind, input, db);
   } catch {
     return false;
   }
 }
 
+function announceQueued(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(OUTBOX_QUEUED_EVENT));
+}
+
 /**
- * Saves a sale, refund, or restock (FR-034). Input the server would reject is refused here
- * first, even offline. Online, the reply is the server's answer. Without one, the command stays
- * on this device and the reply is `{ queued: true }`. If the outbox can't be used (no IndexedDB,
- * nobody signed in), it behaves like a plain online call.
+ * Saves any change (FR-034, FR-049). Input the server would reject is refused here first, even
+ * offline, and so is a change the signed-in role may not make. Online, the reply is the server's
+ * answer. Without one, the command stays on this device, is applied to the device store, and the
+ * reply is `{ queued: true }`. If the outbox can't be used (no IndexedDB, nobody signed in), it
+ * behaves like a plain online call.
  */
 export async function runCommand<K extends CommandKind>(
   kind: K,
   input: CommandInputs[K],
   db: OfflineDb = offlineDb(),
 ): Promise<CommandReply<K>> {
-  // Guards plain-JS callers too: nothing but these three kinds is ever queued (FR-049).
-  if (!Object.hasOwn(SCHEMAS, kind)) {
-    return fail("VALIDATION", "Only sales, refunds, and restocks can be saved offline.");
+  // Guards plain-JS callers too: nothing but a known kind is ever queued.
+  if (!(COMMAND_KINDS as readonly string[]).includes(kind)) {
+    return fail("VALIDATION", "This change can't be saved offline.");
   }
-  const checked = SCHEMAS[kind].safeParse(input);
-  if (!checked.success) return invalid(checked.error.issues);
-
+  const issues = VALIDATORS[kind](input);
+  if (issues) return invalid(issues);
+  const id = commandIdOf(input) ?? "";
+  if (!UUID.test(id)) {
+    return fail("VALIDATION", "This change is missing its id. Reload and try again.");
+  }
   const user = currentUser;
+  const forbidden = forbiddenFor(kind, input, user);
+  if (forbidden) return forbidden;
+
   let saved = false;
   if (user) {
     try {
@@ -165,30 +252,50 @@ export async function runCommand<K extends CommandKind>(
     }
   }
 
-  // A refund of a sale still waiting to sync waits behind it: the replay sends the sale first,
-  // so the server knows the sale when the refund arrives (FR-049, leaf 9.3).
-  if (saved && (!navigator.onLine || (await waitsForItsSale(kind, input, db)))) {
-    await quietly(applyToCatalog(kind, input, db));
+  // Behind a change it needs while online: send the queue now, in order, and answer for this one.
+  if (saved && navigator.onLine && (await waitsInLine(kind, input, db))) {
+    const answer = await sendInLine(id, db);
+    if (answer) {
+      await quietly(removeEntry(id, db));
+      if (!answer.ok) return answer;
+      await quietly(applyToDevice(kind, input, db));
+      return ok({ ...(answer.data as CommandResults[K]), queued: false });
+    }
+  }
+
+  // Offline, or the queue ahead of it couldn't be sent: it waits on the device and the replay
+  // sends it in order (FR-049). What the device knows would make the server refuse it is refused
+  // now. A refund of a sale that is still waiting stays behind it (leaf 9.3).
+  if (saved && (!navigator.onLine || (await waitsInLine(kind, input, db)))) {
+    const problem = await checkOnDevice(kind, input, db).catch(() => null);
+    if (problem) {
+      await quietly(removeEntry(id, db));
+      return problem;
+    }
+    await quietly(applyToDevice(kind, input, db));
+    announceQueued();
     return ok({ queued: true });
   }
 
-  inFlight.add(input.id);
+  inFlight.add(id);
   try {
     const result = await sendCommand(kind, input, user?.id ?? null);
     if (result === null) {
       if (!saved) return fail("OFFLINE", OFFLINE_MESSAGE);
-      await quietly(countAttempt(input.id, db));
-      await quietly(applyToCatalog(kind, input, db));
+      await quietly(countAttempt(id, db));
+      await quietly(applyToDevice(kind, input, db));
+      announceQueued();
       return ok({ queued: true });
     }
     // Answered either way: the form shows a refusal, so it needn't wait in the outbox.
-    if (saved) await quietly(removeEntry(input.id, db));
+    if (saved) await quietly(removeEntry(id, db));
     if (!result.ok) return result;
     const data = result.data as CommandResults[K];
-    await quietly(applyToCatalog(kind, input, db));
+    // The device mirrors the server until its next download of fresh data.
+    await quietly(applyToDevice(kind, input, db));
     return ok({ ...data, queued: false });
   } finally {
-    inFlight.delete(input.id);
+    inFlight.delete(id);
   }
 }
 
@@ -199,10 +306,12 @@ export type FlushReport = {
   refused: { summary: string; message: string }[];
   /** Why the replay stopped early, leaving the rest queued. */
   stopped: null | "offline" | "signed-out";
+  /** The server's answer for each command it answered, by command id. */
+  answers: Record<string, Result<unknown>>;
 };
 
 async function flush(includeRefused: boolean, db: OfflineDb): Promise<FlushReport> {
-  const report: FlushReport = { synced: [], refused: [], stopped: null };
+  const report: FlushReport = { synced: [], refused: [], stopped: null, answers: {} };
   const user = currentUser;
   if (!user) return report;
 
@@ -229,6 +338,7 @@ async function flush(includeRefused: boolean, db: OfflineDb): Promise<FlushRepor
       report.stopped = "signed-out";
       break;
     }
+    report.answers[entry.id] = result;
     if (result.ok) {
       await removeEntry(entry.id, db);
       report.synced.push({ kind: entry.kind, data: result.data });
@@ -237,6 +347,8 @@ async function flush(includeRefused: boolean, db: OfflineDb): Promise<FlushRepor
       report.refused.push({ summary: entry.payload.summary, message: result.error.message });
     }
   }
+  // The device still shows what the refused changes did; the next download replaces all of it.
+  if (report.refused.length > 0) await forgetSnapshotCursor(db);
   return report;
 }
 
@@ -268,6 +380,27 @@ export function flushOutbox(
   });
   running = next;
   return next;
+}
+
+/**
+ * Replays the outbox so command `id` goes after the changes it waits for, and returns the
+ * server's answer for it, or null if it couldn't be sent. A replay already running may have
+ * started before `id` was queued, so a second one follows if needed.
+ */
+async function sendInLine(id: string, db: OfflineDb): Promise<Result<unknown> | null> {
+  for (let round = 0; round < 2; round++) {
+    let report: FlushReport;
+    try {
+      report = await flushOutbox({ db });
+    } catch {
+      return null;
+    }
+    announceQueued();
+    const answer = report.answers[id];
+    if (answer) return answer;
+    if (report.stopped) return null;
+  }
+  return null;
 }
 
 /** Low-stock pop-ups owed for sales that just synced (FR-008). */

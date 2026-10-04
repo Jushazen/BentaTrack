@@ -2,7 +2,8 @@
 
 // Runs a server action that returns Result<T> (src/lib/result.ts): tracks pending state, keeps
 // per-field errors for the form, and shows a toast for success or failure. A thrown call means
-// the request never reached the server (e.g. offline; FR-049 says these edits need a connection).
+// the request never reached the server (e.g. offline, for an action that isn't saved through the
+// outbox; leaf 9.4).
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { Result } from "@/lib/result";

@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppShell
       user={{ name: user.name, role: user.role }}
       lowStockCount={count}
-      status={<SyncStatus user={{ id: user.id, name: user.name }} />}
+      status={<SyncStatus user={{ id: user.id, name: user.name, role: user.role }} />}
     >
       {children}
       <LowStockOnOpen count={count} />

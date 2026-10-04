@@ -1,9 +1,9 @@
 "use client";
 
-// Online/offline indicator and the changes waiting to sync (FR-035, FR-051, §3.4). Leaf 6.2.
-// Sits in the shell's top bar. Keeps the outbox moving: it replays when the app opens, when the
-// connection comes back, when the app returns to the foreground, and every 30 seconds while
-// something is waiting. Tells the user when a sync finishes or fails. Opens a panel listing what
+// Online/offline indicator and the changes waiting to sync (FR-035, FR-051, FR-053, §3.4).
+// Leaf 6.2; every kind of change since leaf 9.4. Sits in the shell's top bar. Keeps the outbox
+// moving: it replays when the app opens, when the connection comes back, when the app returns to
+// the foreground, when a change is queued, and every 30 seconds while something is waiting. Tells the user when a sync finishes or fails. Opens a panel listing what
 // is waiting, with "Sync now" and, for a change the server refused, a deliberate "Discard".
 import { format } from "date-fns";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -14,10 +14,16 @@ import { toast } from "sonner";
 import { showLowStockAlerts } from "@/components/layout/low-stock-alerts";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
-import { refreshCatalog } from "@/lib/offline/catalog";
+import { forgetSnapshotCursor, refreshCatalog } from "@/lib/offline/catalog";
 import type { OutboxEntry } from "@/lib/offline/db";
 import { outboxEntries, readEntry, removeEntry, type SyncUser } from "@/lib/offline/outbox";
-import { flushOutbox, lowStockAlertsFrom, setSyncUser, type FlushReport } from "@/lib/offline/sync";
+import {
+  flushOutbox,
+  lowStockAlertsFrom,
+  OUTBOX_QUEUED_EVENT,
+  setSyncUser,
+  type FlushReport,
+} from "@/lib/offline/sync";
 
 const RETRY_EVERY_MS = 30_000;
 
@@ -140,6 +146,9 @@ export function SyncStatus({ user }: { user: SyncUser }) {
             router.push(`/products/${productId}`),
           );
           router.refresh();
+        }
+        // Synced changes are now the server's; refused ones must leave the device's copy.
+        if (report.synced.length > 0 || report.refused.length > 0) {
           void refreshCatalog().catch(() => undefined);
         }
       } catch {
@@ -160,10 +169,12 @@ export function SyncStatus({ user }: { user: SyncUser }) {
     // After the first paint, so opening the app is never held up by a sync.
     const onOpen = window.setTimeout(() => void sync(false), 0);
     window.addEventListener("online", onOnline);
+    window.addEventListener(OUTBOX_QUEUED_EVENT, onOnline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.clearTimeout(onOpen);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener(OUTBOX_QUEUED_EVENT, onOnline);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [sync]);
@@ -185,10 +196,14 @@ export function SyncStatus({ user }: { user: SyncUser }) {
   async function discard(id: string) {
     try {
       await removeEntry(id);
+      // The device still shows what it did until a full download replaces it.
+      await forgetSnapshotCursor();
       toast.success("Discarded. It won't be sent to the server.");
     } catch {
       toast.error("Couldn't discard it. Please try again.");
+      return;
     }
+    if (navigator.onLine) void refreshCatalog().catch(() => undefined);
   }
 
   const Icon = online ? Wifi : WifiOff;
@@ -238,7 +253,7 @@ export function SyncStatus({ user }: { user: SyncUser }) {
           <p className="text-muted text-sm" role="status">
             {online
               ? "You're online. Changes are saved to the server as you make them."
-              : "You're offline. Sales, refunds, and restocks are saved on this device and sync when you're back online. Other changes need a connection."}
+              : "You're offline. Changes are saved on this device and sync when you're back online."}
           </p>
 
           {rows.length === 0 ? (

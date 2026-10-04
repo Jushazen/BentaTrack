@@ -167,7 +167,7 @@ export function OfflineApp({ forbidden }: { forbidden: ReactNode }) {
     <AppShell
       user={{ name: viewer.name, role: viewer.role }}
       lowStockCount={lowStockCount}
-      status={<SyncStatus user={{ id: viewer.id, name: viewer.name }} />}
+      status={<SyncStatus user={{ id: viewer.id, name: viewer.name, role: viewer.role }} />}
     >
       {page.status === "ok" ? (
         <PageView data={page.data} role={viewer.role} />

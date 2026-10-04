@@ -6,17 +6,15 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { del, put } from "@vercel/blob";
+import {
+  IMAGE_EXTENSIONS,
+  MAX_IMAGE_BYTES,
+  isImageType,
+  type ImageType,
+} from "@/features/products/image-rules";
 
-/** Server actions accept at most 1 MB per request; leave room for the other form fields. */
-export const MAX_IMAGE_BYTES = 900 * 1024;
-
-export const IMAGE_EXTENSIONS = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-} as const;
-
-export type ImageType = keyof typeof IMAGE_EXTENSIONS;
+// The rules live in a module the browser can load too (leaf 9.4).
+export { IMAGE_EXTENSIONS, MAX_IMAGE_BYTES, isImageType, type ImageType };
 
 export const LOCAL_IMAGE_PATH = "/products/images/";
 
@@ -31,10 +29,6 @@ const CONTENT_TYPE_BY_EXTENSION: Record<string, ImageType> = {
 
 /** A problem the user can fix (wrong file) or the owner must fix (storage not configured). */
 export class ImageStorageError extends Error {}
-
-export function isImageType(type: string): type is ImageType {
-  return Object.hasOwn(IMAGE_EXTENSIONS, type);
-}
 
 /** Identifies JPEG, PNG, or WebP from the file's first bytes, whatever its name or stated type. */
 export function sniffImageType(bytes: Uint8Array): ImageType | null {

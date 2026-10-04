@@ -185,10 +185,11 @@ test("[FR-036] a replay the server can't accept comes back as a refusal the devi
   expect(await db.sale.count()).toBe(0);
 });
 
-test("[FR-049] only sales, refunds, and restocks are accepted; product edits need their own online action", async () => {
+test("[FR-049] only known kinds of change are accepted; anything else changes nothing", async () => {
   const owner = await signInAs("OWNER");
   const product = await makeProduct(categoryId, { name: "Rattan Tote" });
-  for (const kind of ["PRODUCT", "PRODUCT_UPDATE", "CATEGORY", "SUPPLIER", "USER", "sale"]) {
+  // Products are never deleted (FR-004); the others aren't kinds at all.
+  for (const kind of ["PRODUCT", "PRODUCT_DELETE", "CATEGORY", "SUPPLIER", "USER", "sale"]) {
     const { status, result } = await sync({
       kind,
       recordedBy: owner.id,

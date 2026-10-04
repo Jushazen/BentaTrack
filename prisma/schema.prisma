@@ -221,3 +221,14 @@ model InventoryChange {
   @@index([productId, occurredAt])
   @@index([occurredAt])
 }
+
+/// FR-036, FR-049 (leaf 9.4). One row per product, category, or supplier change sent from a
+/// device, written in the same transaction as the change. `id` is the change's client-generated
+/// UUID, so a replay of the same change returns `result` instead of applying it again.
+model CommandReceipt {
+  id        String   @id @db.Uuid
+  kind      String
+  userId    String
+  result    Json
+  createdAt DateTime @default(now())
+}

@@ -5,10 +5,13 @@
 // set or see purchase price or supplier (FR-032, A7 follow-on). Only the owner archives and restores
 // discontinued products; nothing is ever deleted (FR-004, H1).
 // Every add, edit, archive, and restore writes an InventoryChange row (FR-012, FR-058).
+// Each can also come from a device through /api/sync (leaf 9.4): it then carries the change's
+// UUID and the device's time, and is applied at most once (a replay returns the first result).
 import { revalidatePath } from "next/cache";
 import type { LowStockAlert } from "@/components/layout/low-stock-alerts";
 import { Prisma } from "@/generated/prisma/client";
 import { requireCapability, type SessionUser } from "@/lib/auth";
+import { findReceipt, runWithReceipt } from "@/lib/commands";
 import { db, type Tx } from "@/lib/db";
 import { recordInventoryChange } from "@/lib/inventory-log";
 import { formatPeso } from "@/lib/money";
@@ -162,15 +165,20 @@ export async function createProduct(formData: FormData): Promise<Result<SavedPro
   if (!parsed.success) return invalid(parsed.error.issues);
   const input = parsed.data;
 
+  // A replay of a product a device already added: answer as the first time (FR-036).
+  const earlier = await findReceipt<SavedProduct>(input.id);
+  if (earlier) return ok(earlier);
+
   const refused = ownerFieldsAllowed(user, input) ?? (await referenceProblems(input));
   if (refused) return refused;
   const image = await storeImage(input.image);
   if (!image.ok) return image;
 
   try {
-    const product = await db.$transaction(async (tx) => {
+    const outcome = await runWithReceipt(input.id, "PRODUCT_CREATE", user.id, async (tx) => {
       const created = await tx.product.create({
         data: {
+          id: input.id,
           name: input.name,
           code: input.code,
           barcode: input.barcode,
@@ -191,13 +199,14 @@ export async function createProduct(formData: FormData): Promise<Result<SavedPro
         type: "EDIT",
         quantityChange: input.stockQuantity,
         userId: user.id,
-        occurredAt: new Date(),
+        occurredAt: input.occurredAt ?? new Date(),
         note: "Product added",
       });
-      return created;
+      return { ...created, lowStockAlerts: [] } satisfies SavedProduct;
     });
+    if (outcome.replayed) await deleteProductImage(image.data);
     revalidatePath(PRODUCTS_PATH);
-    return ok({ ...product, lowStockAlerts: [] });
+    return ok(outcome.result);
   } catch (err) {
     await deleteProductImage(image.data);
     if (isPrismaError(err, "P2002")) return duplicateCodeOrBarcode();
@@ -268,6 +277,9 @@ export async function updateProduct(formData: FormData): Promise<Result<SavedPro
   if (!parsed.success) return invalid(parsed.error.issues);
   const input: UpdateProductInput = parsed.data;
 
+  const earlier = await findReceipt<SavedProduct>(input.commandId);
+  if (earlier) return ok(earlier);
+
   const refused = ownerFieldsAllowed(user, input) ?? (await referenceProblems(input, input.id));
   if (refused) return refused;
   const image = await storeImage(input.image);
@@ -275,7 +287,8 @@ export async function updateProduct(formData: FormData): Promise<Result<SavedPro
 
   let oldImage: string | null = null;
   try {
-    const saved = await db.$transaction(async (tx) => {
+    const outcome = await runWithReceipt(input.commandId, "PRODUCT_UPDATE", user.id, async (tx) => {
+      oldImage = null;
       const before = await lockProduct(tx, input.id);
       if (!before) throw new Refusal(fail("NOT_FOUND", GONE));
       if (before.archivedAt) throw new Refusal(fail("CONFLICT", ARCHIVED));
@@ -325,16 +338,17 @@ export async function updateProduct(formData: FormData): Promise<Result<SavedPro
         type: "EDIT",
         quantityChange: after.stockQuantity - before.stockQuantity,
         userId: user.id,
-        occurredAt: new Date(),
+        occurredAt: input.occurredAt ?? new Date(),
         note: changes.join("; ").slice(0, 1000),
       });
       if (imageUrl !== undefined && before.imageUrl !== imageUrl) oldImage = before.imageUrl;
       return { id: after.id, name: after.name, lowStockAlerts: lowStockAlertsFor(before, after) };
     });
-    await deleteProductImage(oldImage);
+    // A replay changed nothing: the new upload is unused and the old photo still in use.
+    await deleteProductImage(outcome.replayed ? image.data : oldImage);
     revalidatePath(PRODUCTS_PATH);
     revalidatePath(`${PRODUCTS_PATH}/${input.id}`);
-    return ok(saved);
+    return ok(outcome.result);
   } catch (err) {
     await deleteProductImage(image.data);
     if (err instanceof Refusal) return err.result;
@@ -357,10 +371,11 @@ async function setArchived(
   if (!auth.ok) return auth;
   const parsed = productIdSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error.issues);
-  const { id } = parsed.data;
+  const { id, commandId, occurredAt } = parsed.data;
+  const kind = archive ? "PRODUCT_ARCHIVE" : "PRODUCT_RESTORE";
 
   try {
-    const product = await db.$transaction(async (tx) => {
+    const outcome = await runWithReceipt(commandId, kind, auth.data.id, async (tx) => {
       const before = await lockProduct(tx, id);
       if (!before) throw new Refusal(fail("NOT_FOUND", GONE));
       if (Boolean(before.archivedAt) === archive) {
@@ -373,14 +388,14 @@ async function setArchived(
         type: archive ? "ARCHIVE" : "RESTORE",
         quantityChange: 0,
         userId: auth.data.id,
-        occurredAt: new Date(),
+        occurredAt: occurredAt ?? new Date(),
         note: archive ? "Product archived (discontinued)" : "Product restored",
       });
-      return before;
+      return { id, name: before.name };
     });
     revalidatePath(PRODUCTS_PATH);
     revalidatePath(`${PRODUCTS_PATH}/${id}`);
-    return ok({ id, name: product.name });
+    return ok(outcome.result);
   } catch (err) {
     if (err instanceof Refusal) return err.result;
     return unexpected(err);
