@@ -121,9 +121,11 @@ function CategoryItem({ category }: { category: CategoryRow }) {
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-3 py-4 first:pt-0 last:pb-0">
-      <div className="min-w-0 flex-1">
-        <p className="text-text font-medium">{category.name}</p>
+    // On phones the name gets the row to itself, with the buttons below; squeezed beside them
+    // it was cut off under Rename and Delete or the "can't be deleted" note.
+    <li className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
+      <div className="min-w-0 sm:flex-1">
+        <p className="text-text font-medium break-words">{category.name}</p>
         <p className="text-muted text-sm">
           {count === 0 ? "No products" : count === 1 ? "1 product" : `${count} products`}
         </p>

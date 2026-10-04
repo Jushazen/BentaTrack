@@ -150,6 +150,8 @@ Contract revision: 6 (SRS V2 + amendments of 2026-09-24; rev 2: email login, Nex
 | C97 | No password is ever stored on the device (account and password changes need a connection and are never queued); owner-only data leaves a device when its session ends | 9.5 | leaf-9.5:G1 (OFFLINE-NO-PLAINTEXT, FR-045-RECONNECT) | ACTIVE | 6 |
 | C98 | FR-036 a deactivated staff member's queued changes are not lost: the owner can send those made before deactivation, still under the staff member's name; later ones are refused (decided 2026-10-03, option B) | 9.5 | leaf-9.5:G1, leaf-9.5:G2 | ACTIVE | 5 |
 | C99 | FR-049 exception, FR-045, FR-060: managing user accounts and changing passwords need a connection; offline their pages open but changes are refused with a message saying so, and nothing is queued | 9.5 | leaf-9.5:G1 (ACCOUNT-ONLINE-ONLY), leaf-9.5:G2 | ACTIVE | 6 |
+| C100 | FR-004, FR-045: online, a device whose session is gone shows the login page, never the previous user's pages (found closing branch 9) | 9.7 | leaf-9.7:G2 | ACTIVE | 6 |
+| C101 | FR-040 usability: at phone width an in-use category's name and its "can't be deleted" note do not overlap (reported by the user 2026-10-04) | 9.7 | leaf-9.7:G1 | ACTIVE | 6 |
 
 ### Handoffs: requirements that no command can fully verify
 
@@ -217,6 +219,7 @@ Branch state is exactly one of OPEN, VERIFIED, or ABANDONED, derived from its le
     - 9.4 Catalog changes offline ....... gates/leaf-9.4.md
     - 9.5 Account sessions on reconnect . gates/leaf-9.5.md
     - 9.6 Long offline period e2e ....... gates/leaf-9.6.md
+    - 9.7 Branch 9 test fixes ......... gates/leaf-9.7.md
 
 ## Leaf dispatch table
 
@@ -251,8 +254,9 @@ Build order is top to bottom. `Owns` mirrors each ledger's `OWNS:` header. In se
 | 9.4 | src/lib/offline/outbox.ts, src/lib/offline/sync.ts, src/lib/commands.ts, src/app/api/sync/\*\*, src/components/sync/\*\*, src/features/products/\*\*, src/features/categories/\*\*, src/features/suppliers/\*\*, src/lib/storage.ts, prisma/schema.prisma, prisma/migrations/\*\*, tests/unit/sync-catalog/\*\*, tests/integration/sync-catalog/\*\*, tests/e2e/sync-catalog/\*\* | 9.3 | judgment | 21 | VERIFIED |
 | 9.5 | src/lib/offline/outbox.ts, src/lib/offline/sync.ts, src/app/api/sync/\*\*, src/features/users/\*\*, src/features/account/\*\*, src/app/(auth)/session-ended/\*\*, src/lib/auth.ts, src/components/offline/\*\*, src/components/sync/\*\*, prisma/schema.prisma, prisma/migrations/\*\*, tests/unit/sync-accounts/\*\*, tests/integration/sync-accounts/\*\*, tests/e2e/sync-accounts/\*\* | 9.4 | judgment | 22 | VERIFIED |
 | 9.6 | tests/e2e/offline-day/\*\*, prisma/seed-demo.ts, CLAUDE.md | 9.5 | judgment | 23 | VERIFIED |
+| 9.7 | tests/e2e/branch-9-fixes/\*\*, tests/e2e/offline/offline.spec.ts, tests/e2e/offline/snapshot.spec.ts, tests/e2e/products/products.spec.ts, tests/e2e/sync/sync.spec.ts, tests/e2e/sync-accounts/sync-accounts.spec.ts, src/features/categories/category-manager.tsx; only if the session check finds an app bug: src/lib/auth.ts, src/proxy.ts, src/app/sw.ts, src/app/sw-rules.ts, src/components/offline/\*\*, src/app/offline/\*\*, src/lib/offline/read/\*\* | 9.6 | judgment | 24 | VERIFIED |
 
-**Recommended sequential order:** 1.1 → 2.1 → 2.2 → 3.1 → 2.3 → 3.3 → 3.2 → 3.4 → 3.5 → 4.1 → 4.2 → 5.1 → 5.2 → 6.1 → 6.2 → 7.1 → 7.2 → 8.1 → 8.2 → 8.3 → 8.4 → 9.1 → 9.2 → 9.3 → 9.4 → 9.5 → 9.6. Branches 8 and 9 do not wait for 7.2 (blocked on the owner's accounts); 7.2 is re-run after branch 9. Close each branch's `node-*.md` ledger when its last child is VERIFIED.
+**Recommended sequential order:** 1.1 → 2.1 → 2.2 → 3.1 → 2.3 → 3.3 → 3.2 → 3.4 → 3.5 → 4.1 → 4.2 → 5.1 → 5.2 → 6.1 → 6.2 → 7.1 → 7.2 → 8.1 → 8.2 → 8.3 → 8.4 → 9.1 → 9.2 → 9.3 → 9.4 → 9.5 → 9.6 → 9.7. Branches 8 and 9 do not wait for 7.2 (blocked on the owner's accounts); 7.2 is re-run after branch 9. Close each branch's `node-*.md` ledger when its last child is VERIFIED.
 
 ## Status log
 

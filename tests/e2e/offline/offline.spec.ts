@@ -268,6 +268,9 @@ test("[FR-050] [OFFLINE-LINKS] pages opened through the app's links open again o
   page,
   context,
 }, info) => {
+  // It waits up to 30 s for the worker to install, then for saved pages and device data; under a
+  // long run the first install alone can take most of the default 30 s test budget (leaf 9.7).
+  test.slow();
   await logInAs(page, "owner");
   await expect.poll(() => controllingWorker(page), { timeout: 30_000 }).not.toBeNull();
   for (const { path, link, heading } of MENU_PAGES) {

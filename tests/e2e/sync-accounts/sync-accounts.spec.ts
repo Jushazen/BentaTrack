@@ -9,7 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 import pg from "pg";
-import { logIn, logInAs } from "../fixtures/users";
+import { E2E_USERS, logIn, logInAs } from "../fixtures/users";
 
 const FIRST_PASSWORD = "First-Pass-1";
 const NEW_PASSWORD = "Offline-Pass-2";
@@ -136,6 +136,31 @@ test("[ACCOUNT-ONLINE-ONLY] offline, the owner's account pages open but their ch
   await page.goto("/account");
   await expect(page.getByRole("heading", { level: 1, name: "My account" })).toBeVisible();
   await expect(syncStatus(page)).toHaveText(/^Online$/);
+  // The users page opens offline from the device, so wait until the worker controls the page,
+  // knows who is signed in, and the device holds the accounts.
+  await expect
+    .poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), {
+      timeout: 30_000,
+    })
+    .toBe(true);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          caches
+            .match("/api/auth/session", { cacheName: "session", ignoreVary: true })
+            .then(Boolean),
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  const owner = await withTestDb(async (client) => {
+    const { rows } = await client.query<{ id: string }>(`select id from "User" where email = $1`, [
+      E2E_USERS.owner.email,
+    ]);
+    return rows[0]!.id;
+  });
+  await expect.poll(() => deviceRecord(page, "users", owner), { timeout: 30_000 }).not.toBeNull();
 
   await context.setOffline(true);
   await expectNetworkCut(page);

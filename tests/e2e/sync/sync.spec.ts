@@ -107,6 +107,24 @@ async function offlineCatalogCodes(page: Page): Promise<string[]> {
 
 /** Waits until the service worker controls the page, has saved `pages`, and has the catalog. */
 async function waitUntilOfflineReady(page: Page, pages: string[], code: string) {
+  // If the worker finished activating while this page was still loading, Chrome may not hand the
+  // page to it until the next page load (leaf 9.7). A user's next page is controlled; do the same.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () =>
+          Boolean((await navigator.serviceWorker.getRegistration())?.active),
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  const claimed = await page
+    .waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 5_000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!claimed) await page.reload();
   await expect
     .poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), {
       timeout: 30_000,
@@ -143,6 +161,9 @@ test("[FR-034] [FR-035] [FR-036] [FR-051] [SYNC-NOTIFY] a sale and a restock mad
   page,
   context,
 }, info) => {
+  // It waits up to 30 s each for the worker to install, the saved pages, and the catalog; under a
+  // long run the first install alone can take most of the default 30 s test budget (leaf 9.7).
+  test.slow();
   const suffix = `${info.project.name}-${randomUUID().slice(0, 6)}`;
   const name = `Sync Abaca Bag ${suffix}`;
   const code = `E2E-SYNC-${suffix}`;

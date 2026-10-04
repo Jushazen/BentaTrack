@@ -312,17 +312,32 @@ test("[FR-049-REPORT-PARITY] offline reports equal the server's for every period
   });
 });
 
+/** The latest noon in Manila (UTC+8, no daylight saving) at or before the real clock. */
+function latestManilaNoon(): Date {
+  const noon = new Date();
+  noon.setUTCHours(4, 0, 0, 0);
+  if (noon.getTime() > Date.now()) noon.setTime(noon.getTime() - DAY);
+  return noon;
+}
+
 test("[FR-049-DASHBOARD-PARITY] offline dashboards equal the server's, for the owner and for staff", async () => {
-  const shop = await seedShop();
-  const now = new Date();
-  for (const user of [shop.owner, shop.staff]) {
-    const { shop: sales, products } = await shopOn(await deviceFor(user), user.role);
-    actAs(user);
-    const online = unwrap(await getDashboard(now));
-    expect(unwrap(dashboardFrom(sales, products, user.role, now)), user.role).toEqual(online);
-    expect(online.kind).toBe(user.role === "OWNER" ? "owner" : "staff");
-    expect(online.today.saleCount).toBeGreaterThan(0);
-    expect(online.lowStock.count).toBeGreaterThan(0);
+  // Today's seeded sales are 30 minutes to 5 hours old. Just after midnight in Manila they would
+  // fall on yesterday, so the clock is pinned to the latest noon (leaf 9.7).
+  vi.useFakeTimers({ toFake: ["Date"], now: latestManilaNoon() });
+  try {
+    const shop = await seedShop();
+    const now = new Date();
+    for (const user of [shop.owner, shop.staff]) {
+      const { shop: sales, products } = await shopOn(await deviceFor(user), user.role);
+      actAs(user);
+      const online = unwrap(await getDashboard(now));
+      expect(unwrap(dashboardFrom(sales, products, user.role, now)), user.role).toEqual(online);
+      expect(online.kind).toBe(user.role === "OWNER" ? "owner" : "staff");
+      expect(online.today.saleCount).toBeGreaterThan(0);
+      expect(online.lowStock.count).toBeGreaterThan(0);
+    }
+  } finally {
+    vi.useRealTimers();
   }
 });
 

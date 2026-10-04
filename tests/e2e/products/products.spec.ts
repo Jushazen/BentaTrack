@@ -28,6 +28,35 @@ async function insertProduct(name: string, code: string, stockQuantity: number):
   }
 }
 
+/**
+ * Waits until the background work after signing in is done (worker, saved session). Each session
+ * request re-issues the session cookie, so clearing cookies while one is in flight would let the
+ * old user's cookie come back and the next login page would redirect to their dashboard.
+ */
+async function waitUntilSettled(page: Page) {
+  await expect
+    .poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), {
+      timeout: 30_000,
+    })
+    .toBe(true);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          caches
+            .match("/api/auth/session", { cacheName: "session", ignoreVary: true })
+            .then(Boolean),
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  await page.waitForLoadState("networkidle");
+  // The worker's own requests don't show as page traffic, and a session reply re-issues the
+  // cookie. Leave the app so nothing new starts, and let anything in flight land.
+  await page.goto("about:blank");
+  await page.waitForTimeout(2_000);
+}
+
 function productRow(page: Page, name: string) {
   return page
     .getByRole("list", { name: "Products" })
@@ -125,6 +154,7 @@ test("[FR-004] only the owner archives a discontinued product and restores it fr
   await page.goto("/products");
   await expect(page.getByLabel(/Show archived/)).toHaveCount(0);
 
+  await waitUntilSettled(page);
   await page.context().clearCookies();
   await logInAs(page, "owner");
   await page.goto(`/products/${id}`);
