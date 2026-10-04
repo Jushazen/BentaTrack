@@ -23,5 +23,5 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
   EXPECT: CLAUDE OFFLINE NOTE OK
   EVIDENCE: automatic-evidence=v1; definition-sha256=069705e4c3b15a9284e57240287babed21617a2e4b7c65b59049003a1ffe237f; exit=0; EXPECT=matched; output-sha256=c1dbf054ec6117f578db3383c75b2ea1b739ed9c8acd8e53f3243363c7fefd96; output-bytes=23; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\thomas\Desktop\Projects\BentaTrack; path=ab1555cb0450/55 entries
 
-- [ ] G3: on a real Android phone and a real iPhone with the app installed, after at least 8 days offline (or the device clock moved 8 days ahead), the app opens, every page shows data, a sale can be recorded, and queued changes sync once back online
-  EVIDENCE: pending
+- [x] G3: on a real Android phone and a real iPhone with the app installed, after at least 8 days offline (or the device clock moved 8 days ahead), the app opens, every page shows data, a sale can be recorded, and queued changes sync once back online
+  EVIDENCE: manual review 2026-10-04: user (Jushazen) confirmed G3 (installed app on a real Android phone and iPhone, 8+ days offline or clock moved ahead: opens, every page shows data, a sale can be recorded, queued changes sync on reconnect); specific devices and OS versions not stated
