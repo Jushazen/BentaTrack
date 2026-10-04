@@ -8,10 +8,9 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { ok, fail, type Result } from "@/lib/result";
 import { stockStatus, type StockStatus } from "@/lib/stock-status";
-import { productFiltersSchema, type ProductFilters } from "./schemas";
+import { PRODUCT_PAGE_SIZE, productFiltersSchema, type ProductFilters } from "./filters";
 
-// Kept small so the list page loads in under a second on a phone over 4G (NFR-PERF-1).
-export const PRODUCT_PAGE_SIZE = 25;
+export { PRODUCT_PAGE_SIZE };
 
 export type ProductListItem = {
   id: string;

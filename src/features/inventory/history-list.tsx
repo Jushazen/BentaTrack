@@ -1,5 +1,5 @@
-// Inventory history list with filters (FR-010–012). Server component: the filter form is a plain
-// GET form, so it works before JavaScript loads. Times are shown in Manila time.
+// Inventory history list with filters (FR-010–012). No client hooks, so the offline app can draw
+// it too (leaf 9.2); the filter form is a plain GET form, so it works before JavaScript loads. Times are shown in Manila time.
 import type { InventoryChangeType } from "@/generated/prisma/client";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import Link from "next/link";

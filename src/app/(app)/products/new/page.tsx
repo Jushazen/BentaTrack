@@ -1,7 +1,8 @@
 // Add product (FR-001, FR-002). Leaf 3.2. Staff see no purchase price or supplier fields.
+// The page itself is ProductFormView, which the offline app also draws (leaf 9.2).
 import type { Metadata } from "next";
 import { listCategoryOptions } from "@/features/categories/queries";
-import { ProductForm } from "@/features/products/product-form";
+import { ProductFormView } from "@/features/products/product-form-view";
 import { ACCEPTED_IMAGE_TYPES } from "@/features/products/schemas";
 import { listSupplierOptions } from "@/features/suppliers/queries";
 import { requirePageCapability } from "@/lib/auth";
@@ -18,20 +19,10 @@ export default async function NewProductPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-text">Add product</h1>
-        <p className="text-muted mt-1">
-          {suppliers
-            ? "Fill in what you know. Purchase price and supplier can be added later."
-            : "The owner adds the purchase price and supplier later."}
-        </p>
-      </div>
-      <ProductForm
-        categories={categories.ok ? categories.data : []}
-        suppliers={suppliers?.ok ? suppliers.data : null}
-        imageRules={{ maxBytes: MAX_IMAGE_BYTES, acceptedTypes: ACCEPTED_IMAGE_TYPES }}
-      />
-    </div>
+    <ProductFormView
+      categories={categories.ok ? categories.data : []}
+      suppliers={suppliers?.ok ? suppliers.data : null}
+      imageRules={{ maxBytes: MAX_IMAGE_BYTES, acceptedTypes: ACCEPTED_IMAGE_TYPES }}
+    />
   );
 }

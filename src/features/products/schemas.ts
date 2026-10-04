@@ -149,20 +149,9 @@ export type CreateProductInput = z.output<typeof createProductSchema>;
 export type UpdateProductInput = z.output<typeof updateProductSchema>;
 export type ProductIdInput = z.input<typeof productIdSchema>;
 
-/** Filters on the product list page (read from the URL). */
-export const productFiltersSchema = z.object({
-  q: z.string().trim().max(120).optional().catch(undefined),
-  category: z.string().trim().min(1).optional().catch(undefined),
-  /** low = Low Stock or Out of Stock; out = Out of Stock only. */
-  stock: z.enum(["low", "out"]).optional().catch(undefined),
-  /** Owner only: products with no purchase price yet (A7 follow-on). */
-  cost: z.literal("missing").optional().catch(undefined),
-  /** Owner only: archived products instead of the ones in use (FR-057). */
-  archived: z.literal("1").optional().catch(undefined),
-  page: z.coerce.number().int().min(1).max(10_000).optional().catch(undefined),
-});
-
-export type ProductFilters = z.output<typeof productFiltersSchema>;
+// The list filters live in ./filters.ts, which the browser can import (this module needs node:fs
+// through @/lib/storage); the offline product list parses with the same schema (leaf 9.2).
+export { productFiltersSchema, type ProductFilters } from "./filters";
 
 export const ACCEPTED_IMAGE_TYPES = Object.keys(IMAGE_EXTENSIONS).join(",");
 

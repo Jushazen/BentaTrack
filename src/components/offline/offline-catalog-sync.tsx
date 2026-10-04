@@ -9,6 +9,8 @@
 //   connection even if the user never opened them on this device;
 // - asks it to save every page opened through the app's own links as well. Those only fetch
 //   in-app data, which can't be reused offline, and Serwist's own save-on-navigation missed them.
+//   Pages the offline app draws from the device store are never saved (leaf 9.2), so they aren't
+//   asked for. Each request also has the worker save who is signed in (src/app/sw.ts).
 import { useSerwist } from "@serwist/turbopack/react";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -17,9 +19,10 @@ import {
   requestPersistentStorage,
   syncDeviceData,
 } from "@/lib/offline/catalog";
+import { matchOfflineRoute } from "@/lib/offline/read/routes";
 
-/** Pages every signed-in user may need offline. Owner-only pages are saved only when visited. */
-const OFFLINE_PAGES = ["/dashboard", "/checkout", "/sales", "/products"];
+/** Pages every signed-in user may need offline; the worker adds the owner's (src/app/sw-rules.ts). */
+const OFFLINE_PAGES = ["/dashboard", "/checkout", "/sales"];
 const STALE_AFTER_MS = 5 * 60 * 1000;
 
 export function OfflineCatalogSync() {
@@ -66,7 +69,7 @@ export function OfflineCatalogSync() {
   }, [serwist]);
 
   useEffect(() => {
-    if (!serwist || !navigator.onLine) return;
+    if (!serwist || !navigator.onLine || matchOfflineRoute(pathname)) return;
     void serwist.messageSW({ type: "CACHE_URLS", payload: { urlsToCache: [pathname] } });
   }, [serwist, pathname]);
 

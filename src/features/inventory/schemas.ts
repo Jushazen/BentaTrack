@@ -46,6 +46,9 @@ export const INVENTORY_CHANGE_TYPES = [
 ] as const;
 
 /** History filters from the page URL. Anything malformed is dropped rather than rejected. */
+/** Rows per page of the inventory history, online and offline (leaf 9.2). */
+export const HISTORY_PAGE_SIZE = 50;
+
 export const historyFiltersSchema = z.object({
   product: z.string().trim().min(1).max(100).optional().catch(undefined),
   q: z

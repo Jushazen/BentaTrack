@@ -1,9 +1,10 @@
 // Edit product (FR-003). Leaf 3.2. Every saved change is logged in the inventory history.
 // Archived products can't be edited until restored (FR-059), so this sends them to their page.
+// The page itself is ProductFormView, which the offline app also draws (leaf 9.2).
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { listCategoryOptions } from "@/features/categories/queries";
-import { ProductForm } from "@/features/products/product-form";
+import { ProductFormView } from "@/features/products/product-form-view";
 import { getProduct } from "@/features/products/queries";
 import { ACCEPTED_IMAGE_TYPES } from "@/features/products/schemas";
 import { listSupplierOptions } from "@/features/suppliers/queries";
@@ -25,17 +26,11 @@ export default async function EditProductPage({ params }: PageProps<"/products/[
   if (product.data.archived) redirect(`/products/${id}`);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-text">Edit {product.data.name}</h1>
-        <p className="text-muted mt-1">Changes are recorded in the inventory history.</p>
-      </div>
-      <ProductForm
-        product={product.data}
-        categories={categories.ok ? categories.data : []}
-        suppliers={suppliers?.ok ? suppliers.data : null}
-        imageRules={{ maxBytes: MAX_IMAGE_BYTES, acceptedTypes: ACCEPTED_IMAGE_TYPES }}
-      />
-    </div>
+    <ProductFormView
+      product={product.data}
+      categories={categories.ok ? categories.data : []}
+      suppliers={suppliers?.ok ? suppliers.data : null}
+      imageRules={{ maxBytes: MAX_IMAGE_BYTES, acceptedTypes: ACCEPTED_IMAGE_TYPES }}
+    />
   );
 }

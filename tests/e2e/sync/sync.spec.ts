@@ -150,10 +150,20 @@ test("[FR-034] [FR-035] [FR-036] [FR-051] [SYNC-NOTIFY] a sale and a restock mad
 
   await logInAs(page, "staff");
   await expect(page).toHaveURL(/\/dashboard/);
-  // The product page is opened once online, so it can be reloaded offline to restock.
   await page.goto(`/products/${productId}`);
   await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
-  await waitUntilOfflineReady(page, ["/checkout", `/products/${productId}`], code);
+  // Product pages open offline from the device store (leaf 9.2) once the worker has saved who
+  // is signed in; they are no longer kept as saved copies.
+  await waitUntilOfflineReady(page, ["/checkout"], code);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () =>
+          Boolean(await caches.match("/api/auth/session", { cacheName: "session" })),
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await expect(syncStatus(page)).toHaveText(/^Online$/);
 
   await context.setOffline(true);

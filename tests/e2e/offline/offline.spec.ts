@@ -162,6 +162,16 @@ test("[FR-050] [OFFLINE-CATALOG] after one online login, checkout reloads and fi
   // Checkout was never opened on this device: it must be saved for offline use anyway.
   await waitUntilOfflineReady(page, ["/checkout"]);
   await expect.poll(() => offlineCatalogCodes(page), { timeout: 30_000 }).toContain(code);
+  // Who is signed in is saved too, so the offline app can draw unsaved pages (leaf 9.2).
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () =>
+          Boolean(await caches.match("/api/auth/session", { cacheName: "session" })),
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
 
   await context.setOffline(true);
   await expectNetworkCut(page);
@@ -186,10 +196,11 @@ test("[FR-050] [OFFLINE-CATALOG] after one online login, checkout reloads and fi
   await search.press("Enter");
   await expect(page.getByRole("list", { name: "Items in this sale" })).toContainText(name);
 
-  // A page never opened on this device shows the offline page instead of a browser error.
+  // A page never opened on this device opens from the device store (FR-049, leaf 9.2; it showed
+  // the offline notice before SRS v2.1). The notice is covered by [OFFLINE-USER-SWITCH].
   await page.goto("/inventory-history");
-  await expect(page.getByRole("heading", { name: "You are offline" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open checkout" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inventory history", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "You are offline" })).toHaveCount(0);
 
   await context.setOffline(false);
 });
@@ -222,9 +233,10 @@ test("[FR-050] [OFFLINE-LINKS] pages opened through the app's links open again o
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
   }
+  // Inventory history is drawn by the offline app (leaf 9.2), so it is never kept as a saved copy.
   await waitUntilOfflineReady(
     page,
-    MENU_PAGES.map((p) => p.path),
+    MENU_PAGES.filter((p) => p.path !== "/inventory-history").map((p) => p.path),
   );
 
   await context.setOffline(true);

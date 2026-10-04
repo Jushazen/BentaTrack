@@ -5,9 +5,9 @@ import type { InventoryChangeType, Prisma } from "@/generated/prisma/client";
 import { requireCapability } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ok, type Result } from "@/lib/result";
-import { historyFiltersSchema, type HistoryFilters } from "./schemas";
+import { HISTORY_PAGE_SIZE, historyFiltersSchema, type HistoryFilters } from "./schemas";
 
-export const HISTORY_PAGE_SIZE = 50;
+export { HISTORY_PAGE_SIZE };
 
 export type HistoryEntry = {
   id: string;

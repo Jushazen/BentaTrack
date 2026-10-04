@@ -1,7 +1,7 @@
 // Product list with filters (FR-006, FR-009, FR-057: archived products only under the owner's
-// Archived filter). Server component: the filter form is a plain GET
-// form, so it works before JavaScript loads. One row layout for every screen size: a card on
-// phones that lines up into columns on wider screens.
+// Archived filter). No client hooks, so the offline app can draw it too (leaf 9.2); the filter
+// form is a plain GET form, so it works before JavaScript loads. One row layout for every screen
+// size: a card on phones that lines up into columns on wider screens.
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
