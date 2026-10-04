@@ -93,6 +93,10 @@ export async function refundSale(input: RefundSaleInput): Promise<Result<RefundR
           );
         }
         const byId = new Map(sale.items.map((item) => [item.id, item]));
+        // A refund queued before its sale synced names lines by product (FR-049).
+        const byProduct = new Map(
+          sale.items.flatMap((item) => (item.productId ? [[item.productId, item] as const] : [])),
+        );
 
         // Report every problem at once so the whole form can be fixed in one go.
         const problems: Record<string, string[]> = {};
@@ -101,15 +105,27 @@ export async function refundSale(input: RefundSaleInput): Promise<Result<RefundR
           quantity: number;
           returnToStock: boolean;
         }[] = [];
-        for (const { saleItemId, quantity, returnToStock } of items) {
-          const item = byId.get(saleItemId);
+        const seen = new Set<string>();
+        for (const line of items) {
+          const { quantity, returnToStock } = line;
+          const key = refundLineKey(line);
+          const item =
+            line.saleItemId !== undefined
+              ? byId.get(line.saleItemId)
+              : byProduct.get(line.productId ?? "");
           if (!item) {
-            problems[refundLineKey(saleItemId)] = ["This item isn't part of this sale."];
+            problems[key] = ["This item isn't part of this sale."];
             continue;
           }
+          // One line named by its id and again by its product.
+          if (seen.has(item.id)) {
+            problems[key] = ["Each item can appear only once in a refund."];
+            continue;
+          }
+          seen.add(item.id);
           const left = item.quantity - item.refundedQuantity;
           if (quantity > left) {
-            problems[refundLineKey(saleItemId)] = [
+            problems[key] = [
               left === 0
                 ? `${item.productName} has already been fully refunded.`
                 : `Only ${left} of ${item.productName} can still be refunded.`,

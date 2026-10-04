@@ -153,22 +153,34 @@ export async function countAttempt(id: string, db: OfflineDb = offlineDb()): Pro
 
 /**
  * Moves the device's catalog stock the way `kind` moves the server's, so the next offline sale
- * sees what is really left. Refunds are left to the next catalog refresh: they name sale lines,
- * not products. Never below zero; products not in the catalog are skipped.
+ * sees what is really left. A refund puts back the units it returns to stock (leaf 9.3): its
+ * lines name the product directly, or a line of a sale the device holds. Never below zero;
+ * products not in the catalog are skipped.
  */
 export async function applyToCatalog<K extends CommandKind>(
   kind: K,
   input: CommandInputs[K],
   db: OfflineDb = offlineDb(),
 ): Promise<void> {
-  const deltas: [string, number][] =
-    kind === "SALE"
-      ? (input as RecordSaleInput).items.map((item) => [item.productId, -item.quantity])
-      : kind === "RESTOCK"
-        ? [[(input as RestockInput).productId, (input as RestockInput).quantity]]
-        : [];
-  if (deltas.length === 0) return;
-  await db.transaction("rw", db.products, async () => {
+  await db.transaction("rw", [db.products, db.sales], async () => {
+    const deltas: [string, number][] = [];
+    if (kind === "SALE") {
+      for (const item of (input as RecordSaleInput).items) {
+        deltas.push([item.productId, -item.quantity]);
+      }
+    } else if (kind === "RESTOCK") {
+      const restock = input as RestockInput;
+      deltas.push([restock.productId, restock.quantity]);
+    } else {
+      const refund = input as RefundSaleInput;
+      const sale = await db.sales.get(refund.saleId);
+      for (const line of refund.items) {
+        if (line.returnToStock === false) continue;
+        const productId =
+          line.productId ?? sale?.items.find((item) => item.id === line.saleItemId)?.productId;
+        if (productId) deltas.push([productId, line.quantity]);
+      }
+    }
     for (const [productId, delta] of deltas) {
       const product = await db.products.get(productId);
       if (!product || !Number.isFinite(delta)) continue;

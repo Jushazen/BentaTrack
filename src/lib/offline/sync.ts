@@ -4,6 +4,7 @@
 // queued; any answer settles it. flushOutbox() later sends what is queued, oldest first. Every
 // command carries its client-generated UUID, so sending one twice never applies it twice.
 // Only sales, refunds, and restocks go through here; every other edit needs a connection.
+// A refund of a sale that hasn't synced yet always waits in the outbox behind it (leaf 9.3).
 // Browser only.
 import type { LowStockAlert } from "@/components/layout/low-stock-alerts";
 import { restockSchema } from "@/features/inventory/schemas";
@@ -120,6 +121,21 @@ async function quietly(work: Promise<unknown>): Promise<void> {
   }
 }
 
+/** True for a refund whose sale is still in the outbox. */
+async function waitsForItsSale<K extends CommandKind>(
+  kind: K,
+  input: CommandInputs[K],
+  db: OfflineDb,
+): Promise<boolean> {
+  if (kind !== "REFUND") return false;
+  try {
+    const sale = await db.outbox.get((input as CommandInputs["REFUND"]).saleId);
+    return sale?.kind === "SALE";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Saves a sale, refund, or restock (FR-034). Input the server would reject is refused here
  * first, even offline. Online, the reply is the server's answer. Without one, the command stays
@@ -149,7 +165,9 @@ export async function runCommand<K extends CommandKind>(
     }
   }
 
-  if (saved && !navigator.onLine) {
+  // A refund of a sale still waiting to sync waits behind it: the replay sends the sale first,
+  // so the server knows the sale when the refund arrives (FR-049, leaf 9.3).
+  if (saved && (!navigator.onLine || (await waitsForItsSale(kind, input, db)))) {
     await quietly(applyToCatalog(kind, input, db));
     return ok({ queued: true });
   }

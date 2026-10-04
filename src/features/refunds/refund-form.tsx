@@ -5,7 +5,8 @@
 // money to return is previewed with the same rule the server uses. A reason is required (H4.4). The
 // command id is kept until the refund succeeds, so pressing "Yes, refund" again after a dropped
 // connection can't refund twice. Offline, the refund is saved on this device and syncs later
-// (FR-034, leaf 6.2).
+// (FR-034, leaf 6.2). A sale recorded offline can be refunded before it syncs: its lines have no
+// ids yet, so the refund names them by product and is sent after the sale (FR-049, leaf 9.3).
 import { ListChecks, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -17,7 +18,7 @@ import { formatPeso } from "@/lib/money";
 import { runCommand } from "@/lib/offline/sync";
 import type { SaleLine } from "./queries";
 import { refundAmounts } from "./refund-math";
-import { MAX_REFUND_NOTE, refundLineKey } from "./schemas";
+import { MAX_REFUND_NOTE, refundLineKey, type RefundLineRef } from "./schemas";
 
 type Props = {
   saleId: string;
@@ -25,6 +26,8 @@ type Props = {
   subtotal: number;
   total: number;
   items: SaleLine[];
+  /** The sale is still waiting to sync, so its lines are named by product. */
+  unsynced?: boolean;
 };
 
 function left(item: SaleLine): number {
@@ -36,7 +39,7 @@ function parseQuantity(text: string | undefined): number {
   return text && /^\d+$/.test(text.trim()) ? Number(text.trim()) : 0;
 }
 
-export function RefundForm({ saleId, subtotal, total, items }: Props) {
+export function RefundForm({ saleId, subtotal, total, items, unsynced = false }: Props) {
   const router = useRouter();
   const { pending, fieldErrors, run, clearErrors } = useResultAction();
   const commandId = useRef<string | null>(null);
@@ -58,6 +61,8 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
   const keptOutUnits = chosen
     .filter(({ item }) => item.productId && keptOut[item.id])
     .reduce((sum, { quantity }) => sum + quantity, 0);
+  const lineRef = (item: SaleLine): RefundLineRef =>
+    unsynced && item.productId ? { productId: item.productId } : { saleItemId: item.id };
   const amount = tooMany
     ? 0
     : refundAmounts(
@@ -95,7 +100,7 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
           occurredAt: new Date().toISOString(),
           saleId,
           items: chosen.map(({ item, quantity }) => ({
-            saleItemId: item.id,
+            ...lineRef(item),
             quantity,
             returnToStock: returnsToStock(item),
           })),
@@ -144,7 +149,7 @@ export function RefundForm({ saleId, subtotal, total, items }: Props) {
       <ul aria-label="Items to refund" className="divide-border divide-y">
         {refundable.map((item) => {
           const inputId = `refund-${item.id}`;
-          const errors = fieldErrors[refundLineKey(item.id)];
+          const errors = fieldErrors[refundLineKey(lineRef(item))];
           const quantity = parseQuantity(quantities[item.id]);
           const over = quantity > left(item);
           const errorText = over ? `Only ${left(item)} can be refunded.` : errors?.join(" ");

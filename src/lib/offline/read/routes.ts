@@ -1,7 +1,7 @@
-// Pages the offline app draws from the device store (FR-049, FR-055; leaf 9.2). The service
-// worker sends these to the offline app whenever the network is down, so they open offline even
-// if never visited (one product, its edit form). Other pages (dashboard, checkout, sales,
-// reports) are served from their saved copies until leaf 9.3.
+// Pages the offline app draws from the device store (FR-049, FR-055; leaves 9.2, 9.3). The
+// service worker sends these to the offline app whenever the network is down, so they open
+// offline even if never visited (one product, its edit form, one sale). Checkout is the only
+// other page, served from its saved copy.
 // Pure, so the service worker can bundle it too.
 import type { Capability } from "@/lib/permissions";
 
@@ -14,7 +14,11 @@ export type OfflineRoute =
   | { page: "suppliers" }
   | { page: "users" }
   | { page: "account" }
-  | { page: "inventory-history" };
+  | { page: "inventory-history" }
+  | { page: "dashboard" }
+  | { page: "sales" }
+  | { page: "sale"; id: string }
+  | { page: "reports" };
 
 /** What each page needs, as the server page checks with requirePageCapability(). */
 export const OFFLINE_ROUTE_CAPABILITY: Record<OfflineRoute["page"], Capability> = {
@@ -27,6 +31,10 @@ export const OFFLINE_ROUTE_CAPABILITY: Record<OfflineRoute["page"], Capability> 
   users: "users.manage",
   account: "account.password",
   "inventory-history": "inventory.history",
+  dashboard: "dashboard.staff",
+  sales: "sales.read",
+  sale: "sales.read",
+  reports: "reports.read",
 };
 
 const FIXED: Record<string, OfflineRoute> = {
@@ -37,6 +45,9 @@ const FIXED: Record<string, OfflineRoute> = {
   "/users": { page: "users" },
   "/account": { page: "account" },
   "/inventory-history": { page: "inventory-history" },
+  "/dashboard": { page: "dashboard" },
+  "/sales": { page: "sales" },
+  "/reports": { page: "reports" },
 };
 
 function decode(segment: string): string | null {
@@ -52,6 +63,11 @@ export function matchOfflineRoute(pathname: string): OfflineRoute | null {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   const fixed = FIXED[path];
   if (fixed) return fixed;
+  const sale = /^\/sales\/([^/]+)$/.exec(path);
+  if (sale) {
+    const id = decode(sale[1]);
+    return id ? { page: "sale", id } : null;
+  }
   const match = /^\/products\/([^/]+)(\/edit)?$/.exec(path);
   // Product photos live under /products/images/<file> and are files, not pages.
   if (!match || match[1] === "images") return null;

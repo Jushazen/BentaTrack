@@ -1,72 +1,26 @@
 // Server-side reads: Owner and staff dashboards (FR-023–025; amendment A6 FR-023a, A7 follow-on).
 // Leaf 5.2. Staff get today's sales, low stock and recent sales only: no catalogue totals, best
 // sellers, purchase prices or profit. Purchase costs are never read for the staff view.
-import type { PaymentMethod } from "@/generated/prisma/client";
-import { buildSalesReport, type BestSeller } from "@/features/reports/report-math";
+// The dashboard is put together by ./dashboard.ts, which the offline app uses too (leaf 9.3).
+import { buildSalesReport } from "@/features/reports/report-math";
 import { requireCapability } from "@/lib/auth";
-import { periodRange, periodTitle, type DateRange } from "@/lib/dates";
+import type { DateRange } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { ok, type Result } from "@/lib/result";
-import { stockStatus, type StockStatus } from "@/lib/stock-status";
+import { stockStatus } from "@/lib/stock-status";
+import {
+  assembleDashboard,
+  dashboardRanges,
+  LOW_STOCK_LIMIT,
+  NEEDS_COST_LIMIT,
+  RECENT_SALES_LIMIT,
+  type Dashboard,
+  type DashboardParts,
+  type RecentSale,
+} from "./dashboard";
 
-export const LOW_STOCK_LIMIT = 8;
-export const RECENT_SALES_LIMIT = 5;
-export const NEEDS_COST_LIMIT = 5;
-export const DASHBOARD_BEST_SELLERS = 5;
-
-export type TodaySummary = {
-  /** "Sunday, 27 September 2026", Manila time. */
-  title: string;
-  /** Centavos: sales today less refunds given today. */
-  netSales: number;
-  grossSales: number;
-  refunds: number;
-  saleCount: number;
-  itemsSold: number;
-};
-
-export type LowStockItem = {
-  id: string;
-  name: string;
-  code: string;
-  quantity: number;
-  threshold: number;
-  status: StockStatus;
-};
-
-export type RecentSale = {
-  id: string;
-  occurredAt: Date;
-  staffName: string;
-  /** Centavos. */
-  total: number;
-  itemCount: number;
-  paymentMethod: PaymentMethod;
-};
-
-type CommonDashboard = {
-  today: TodaySummary;
-  /** Low Stock and Out of Stock products, emptiest first. */
-  lowStock: { count: number; items: LowStockItem[] };
-  recentSales: RecentSale[];
-};
-
-export type StaffDashboard = CommonDashboard & { kind: "staff" };
-
-export type OwnerDashboard = CommonDashboard & {
-  kind: "owner";
-  totalProducts: number;
-  /** Units on hand across every product. */
-  unitsInStock: number;
-  outOfStockCount: number;
-  /** Products still waiting for a purchase price (A7 follow-on), so profit leaves them out. */
-  needsCost: { count: number; items: { id: string; name: string; code: string }[] };
-  /** Best sellers of the current Manila month. */
-  bestSellers: { title: string; items: BestSeller[] };
-};
-
-export type Dashboard = StaffDashboard | OwnerDashboard;
+export * from "./dashboard";
 
 // Stock figures cover products in use only; archived ones are left out (FR-057).
 const inUse = { archivedAt: null };
@@ -74,6 +28,13 @@ const lowStockWhere = {
   ...inUse,
   stockQuantity: { lte: db.product.fields.lowStockThreshold },
 };
+
+/** Oldest first, as the reports read them (see src/features/reports/queries.ts). */
+const reportOrder = [
+  { occurredAt: "asc" as const },
+  { recordedAt: "asc" as const },
+  { id: "asc" as const },
+];
 
 /** Sales and refunds in `range`, shaped for the report arithmetic. Costs only when asked. */
 async function salesFigures(range: DateRange, withCosts: boolean) {
@@ -97,6 +58,7 @@ async function salesFigures(range: DateRange, withCosts: boolean) {
           orderBy: { id: "asc" },
         },
       },
+      orderBy: reportOrder,
     }),
     db.refund.findMany({
       where: { occurredAt: inRange },
@@ -104,8 +66,12 @@ async function salesFigures(range: DateRange, withCosts: boolean) {
         occurredAt: true,
         amount: true,
         sale: { select: { paymentMethod: true } },
-        items: { select: { quantity: true, amount: true, saleItem: { select: productRef } } },
+        items: {
+          select: { quantity: true, amount: true, saleItem: { select: productRef } },
+          orderBy: { id: "asc" },
+        },
       },
+      orderBy: reportOrder,
     }),
   ]);
   return buildSalesReport({
@@ -126,7 +92,7 @@ async function salesFigures(range: DateRange, withCosts: boolean) {
   });
 }
 
-async function lowStock(): Promise<CommonDashboard["lowStock"]> {
+async function lowStock(): Promise<DashboardParts["lowStock"]> {
   const [count, rows] = await Promise.all([
     db.product.count({ where: lowStockWhere }),
     db.product.findMany({
@@ -170,6 +136,7 @@ async function recentSales(): Promise<RecentSale[]> {
     total: row.total,
     itemCount: row.items.reduce((sum, item) => sum + item.quantity, 0),
     paymentMethod: row.paymentMethod,
+    pending: false,
   }));
 }
 
@@ -179,29 +146,16 @@ export async function getDashboard(now: Date = new Date()): Promise<Result<Dashb
   if (!auth.ok) return auth;
   const isOwner = can(auth.data.role, "dashboard.owner");
 
-  const todayRange = periodRange("day", now);
-  const [todayFigures, low, recent] = await Promise.all([
-    salesFigures(todayRange, false),
+  const ranges = dashboardRanges(now);
+  const [today, low, recent] = await Promise.all([
+    salesFigures(ranges.today, false),
     lowStock(),
     recentSales(),
   ]);
-  const { totals } = todayFigures;
-  const common: CommonDashboard = {
-    today: {
-      title: periodTitle("day", todayRange),
-      netSales: totals.netSales,
-      grossSales: totals.grossSales,
-      refunds: totals.refunds,
-      saleCount: totals.saleCount,
-      itemsSold: totals.itemsSold,
-    },
-    lowStock: low,
-    recentSales: recent,
-  };
-  if (!isOwner) return ok({ kind: "staff", ...common });
+  const parts: DashboardParts = { now, today, lowStock: low, recentSales: recent };
+  if (!isOwner) return ok(assembleDashboard(parts));
 
-  const monthRange = periodRange("month", now);
-  const [stock, outOfStockCount, needsCostCount, needsCostRows, monthFigures] = await Promise.all([
+  const [stock, outOfStockCount, needsCostCount, needsCostRows, month] = await Promise.all([
     db.product.aggregate({
       where: inUse,
       _count: { _all: true },
@@ -215,19 +169,19 @@ export async function getDashboard(now: Date = new Date()): Promise<Result<Dashb
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       take: NEEDS_COST_LIMIT,
     }),
-    salesFigures(monthRange, false),
+    salesFigures(ranges.month, false),
   ]);
 
-  return ok({
-    kind: "owner",
-    ...common,
-    totalProducts: stock._count._all,
-    unitsInStock: stock._sum.stockQuantity ?? 0,
-    outOfStockCount,
-    needsCost: { count: needsCostCount, items: needsCostRows },
-    bestSellers: {
-      title: periodTitle("month", monthRange),
-      items: monthFigures.bestSellers.slice(0, DASHBOARD_BEST_SELLERS),
-    },
-  });
+  return ok(
+    assembleDashboard({
+      ...parts,
+      owner: {
+        totalProducts: stock._count._all,
+        unitsInStock: stock._sum.stockQuantity ?? 0,
+        outOfStockCount,
+        needsCost: { count: needsCostCount, items: needsCostRows },
+        month,
+      },
+    }),
+  );
 }

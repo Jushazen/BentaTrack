@@ -1,15 +1,22 @@
-// Server-side reads: Sales history and refunds (FR-012, FR-039, FR-040). Leaf 4.2.
+// Server-side reads: Sales history and refunds (FR-012, FR-039, FR-040). Leaf 4.2. Offline, the
+// same pages read the device store through src/lib/offline/sales-read.ts (leaf 9.3).
 // Staff and owner both see every sale, since either may handle a return. Purchase costs are never
 // read here: they're owner-only (FR-042) and a refund doesn't need them.
 import type { PaymentMethod, Prisma } from "@/generated/prisma/client";
 import { requireCapability } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fail, ok, type Result } from "@/lib/result";
-import { refundSaleSchema, salesFiltersSchema, type SalesFilters } from "./schemas";
+import { refundState, type RefundState } from "./refund-math";
+import {
+  refundSaleSchema,
+  SALES_PAGE_SIZE,
+  salesFiltersSchema,
+  type SalesFilters,
+} from "./schemas";
 
-export const SALES_PAGE_SIZE = 50;
+export { SALES_PAGE_SIZE };
 
-export type RefundState = "NONE" | "PARTIAL" | "FULL";
+export type { RefundState };
 
 export type SaleSummary = {
   id: string;
@@ -23,6 +30,8 @@ export type SaleSummary = {
   paymentMethod: PaymentMethod;
   itemCount: number;
   refundState: RefundState;
+  /** Recorded on this device and not yet synced (offline only; always false here). */
+  pending: boolean;
 };
 
 export type SalesPage = {
@@ -32,13 +41,6 @@ export type SalesPage = {
   pageCount: number;
   filters: SalesFilters;
 };
-
-function refundState(items: { quantity: number; refundedQuantity: number }[]): RefundState {
-  const refunded = items.reduce((sum, item) => sum + item.refundedQuantity, 0);
-  if (refunded === 0) return "NONE";
-  const sold = items.reduce((sum, item) => sum + item.quantity, 0);
-  return refunded >= sold ? "FULL" : "PARTIAL";
-}
 
 /** Sales, newest first. `rawFilters` usually comes from the page's URL. */
 export async function listSales(rawFilters: unknown = {}): Promise<Result<SalesPage>> {
@@ -97,6 +99,7 @@ export async function listSales(rawFilters: unknown = {}): Promise<Result<SalesP
       paymentMethod: row.paymentMethod,
       itemCount: row.items.reduce((sum, item) => sum + item.quantity, 0),
       refundState: refundState(row.items),
+      pending: false,
     })),
     total,
     page,
@@ -126,6 +129,8 @@ export type SaleRefund = {
   note: string | null;
   /** `returnedToStock` is false for units kept out of stock, e.g. damaged (H4.2). */
   items: { productName: string; quantity: number; returnedToStock: boolean }[];
+  /** Recorded on this device and not yet synced (offline only). */
+  pending: boolean;
 };
 
 export type SaleDetail = {
@@ -143,6 +148,8 @@ export type SaleDetail = {
   items: SaleLine[];
   /** Oldest first. */
   refunds: SaleRefund[];
+  /** Recorded on this device and not yet synced (offline only). */
+  pending: boolean;
 };
 
 /** One sale with its lines and refunds, or NOT_FOUND. */
@@ -193,7 +200,7 @@ export async function getSale(id: string): Promise<Result<SaleDetail>> {
             orderBy: { id: "asc" },
           },
         },
-        orderBy: [{ occurredAt: "asc" }, { recordedAt: "asc" }],
+        orderBy: [{ occurredAt: "asc" }, { recordedAt: "asc" }, { id: "asc" }],
       },
     },
   });
@@ -222,6 +229,8 @@ export async function getSale(id: string): Promise<Result<SaleDetail>> {
         quantity: item.quantity,
         returnedToStock: item.returnedToStock,
       })),
+      pending: false,
     })),
+    pending: false,
   });
 }

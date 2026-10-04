@@ -32,7 +32,7 @@ function ruleFor(path: string, headers: Record<string, string> = {}): RuntimeCac
   );
 }
 
-const PAGES = ["/dashboard", "/checkout", "/sales", "/sales/abc", "/reports", "/login"];
+const PAGES = ["/checkout", "/login"];
 
 test("[SW-NO-EXPIRY] saved pages have no age limit and no entry cap", () => {
   for (const path of PAGES) {
@@ -61,6 +61,12 @@ test("[SW-NO-EXPIRY] offline-app pages are never answered from a saved copy", ()
     "/account",
     "/inventory-history",
     "/inventory-history?product=p1",
+    "/dashboard",
+    "/sales",
+    "/sales/abc",
+    "/sales?q=tote",
+    "/reports",
+    "/reports?period=week",
   ];
   for (const path of offlineApp) {
     expect(ruleFor(path)?.handler, path).toBeInstanceOf(NetworkOnly);
@@ -84,14 +90,18 @@ test("[SW-NO-EXPIRY] the offline app knows every page it draws, and only those",
   expect(matchOfflineRoute("/products/%E0%A4%A")).toBeNull();
   expect(matchOfflineRoute("/products/p1/other")).toBeNull();
   expect(matchOfflineRoute("/inventory-history")).toEqual({ page: "inventory-history" });
-  for (const path of ["/dashboard", "/checkout", "/sales", "/sales/s1", "/reports", "/offline"]) {
+  expect(matchOfflineRoute("/dashboard")).toEqual({ page: "dashboard" });
+  expect(matchOfflineRoute("/sales")).toEqual({ page: "sales" });
+  expect(matchOfflineRoute("/sales/s1")).toEqual({ page: "sale", id: "s1" });
+  expect(matchOfflineRoute("/reports")).toEqual({ page: "reports" });
+  for (const path of ["/checkout", "/sales/s1/other", "/offline", "/login"]) {
     expect(matchOfflineRoute(path), path).toBeNull();
   }
 });
 
 test("[SW-NO-EXPIRY] each role keeps the other pages it may open saved, and the session is wiped at sign-in and sign-out", () => {
-  expect(pagesToSave("OWNER")).toEqual(["/dashboard", "/checkout", "/sales", "/reports"]);
-  expect(pagesToSave("STAFF")).toEqual(["/dashboard", "/checkout", "/sales"]);
+  expect(pagesToSave("OWNER")).toEqual(["/checkout"]);
+  expect(pagesToSave("STAFF")).toEqual(["/checkout"]);
   expect(USER_CACHES).toContain(SESSION_CACHE);
   expect(USER_CACHES).toContain("pages");
 

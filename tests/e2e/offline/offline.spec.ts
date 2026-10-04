@@ -75,6 +75,48 @@ async function waitUntilOfflineReady(page: Page, pages: string[]) {
   }
 }
 
+/** Whose data the device store holds (IndexedDB meta "snapshotRole"), or null. */
+async function deviceDataRole(page: Page): Promise<string | null> {
+  return page.evaluate(
+    () =>
+      new Promise<string | null>((resolve) => {
+        const open = indexedDB.open("bentatrack");
+        open.onerror = () => resolve(null);
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains("meta")) {
+            db.close();
+            resolve(null);
+            return;
+          }
+          const get = db.transaction("meta").objectStore("meta").get("snapshotRole");
+          get.onsuccess = () => {
+            resolve((get.result as { value: string } | undefined)?.value ?? null);
+            db.close();
+          };
+          get.onerror = () => resolve(null);
+        };
+      }),
+  );
+}
+
+/**
+ * Waits until the offline app can draw this user's pages (leaves 9.2, 9.3): the session is saved
+ * and the device store holds their data.
+ */
+async function waitUntilDrawnOffline(page: Page, role: "OWNER" | "STAFF") {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () =>
+          Boolean(await caches.match("/api/auth/session", { cacheName: "session" })),
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  await expect.poll(() => deviceDataRole(page), { timeout: 30_000 }).toBe(role);
+}
+
 /** Positive control: with the network cut, a request that is never cached must fail. */
 async function expectNetworkCut(page: Page) {
   const outcome = await page.evaluate(() =>
@@ -233,11 +275,10 @@ test("[FR-050] [OFFLINE-LINKS] pages opened through the app's links open again o
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
   }
-  // Inventory history is drawn by the offline app (leaf 9.2), so it is never kept as a saved copy.
-  await waitUntilOfflineReady(
-    page,
-    MENU_PAGES.filter((p) => p.path !== "/inventory-history").map((p) => p.path),
-  );
+  // Only checkout is kept as a saved copy; the other pages are drawn by the offline app from the
+  // device store (leaves 9.2, 9.3).
+  await waitUntilOfflineReady(page, ["/checkout"]);
+  await waitUntilDrawnOffline(page, "OWNER");
 
   await context.setOffline(true);
   await expectNetworkCut(page);
@@ -285,13 +326,11 @@ test("[OFFLINE-USER-SWITCH] signing in as someone else clears the previous user'
   context,
 }, info) => {
   await logInAs(page, "owner");
-  // A visit made before the new worker takes control goes straight to the network, uncached.
-  await waitUntilOfflineReady(page, ["/dashboard"]);
-  await page.goto("/reports");
-  await expect(page.getByRole("heading", { name: "Sales reports", level: 1 })).toBeVisible();
-  await waitUntilOfflineReady(page, ["/reports"]);
+  await waitUntilOfflineReady(page, ["/checkout"]);
+  await waitUntilDrawnOffline(page, "OWNER");
 
-  // Control: the owner's report page does open offline while the owner is signed in.
+  // Control: the owner's report page does open offline while the owner is signed in. It is drawn
+  // by the offline app from the device store (leaf 9.3), not kept as a saved copy.
   await context.setOffline(true);
   await expectNetworkCut(page);
   await page.goto("/reports");
@@ -300,14 +339,18 @@ test("[OFFLINE-USER-SWITCH] signing in as someone else clears the previous user'
 
   await page.goto("/dashboard");
   await logOut(page, info);
-  expect(await isPageCached(page, "/reports")).toBe(false);
+  expect(await isPageCached(page, "/checkout")).toBe(false);
+  expect(await isPageCached(page, "/api/auth/session")).toBe(false);
 
   await logInAs(page, "staff");
   await waitUntilOfflineReady(page, ["/checkout"]);
+  await waitUntilDrawnOffline(page, "STAFF");
   await context.setOffline(true);
   await expectNetworkCut(page);
   await page.goto("/reports");
-  await expect(page.getByRole("heading", { name: "You are offline" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "You don't have access to this page" }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sales reports" })).toHaveCount(0);
   await context.setOffline(false);
 });

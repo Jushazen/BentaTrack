@@ -1,5 +1,6 @@
 // Sales list with search (FR-012). Server component: the search form is a plain GET form, so it
-// works before JavaScript loads. Times are shown in Manila time.
+// works before JavaScript loads. Times are shown in Manila time. The offline app draws it too,
+// with sales and refunds that haven't synced yet marked "Waiting to sync" (leaf 9.3).
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,22 @@ export function RefundStateBadge({ state }: { state: RefundState }) {
     <Badge tone="danger">Refunded</Badge>
   ) : (
     <Badge tone="warn">Partly refunded</Badge>
+  );
+}
+
+/** On a sale or refund recorded on this device that hasn't reached the server yet (FR-049). */
+export function WaitingBadge() {
+  return <Badge tone="warn">Waiting to sync</Badge>;
+}
+
+/** Offline pages say how many of their records haven't synced yet. */
+export function WaitingNote({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p role="status" className="text-warn text-sm">
+      Includes {count === 1 ? "1 sale or refund" : `${count} sales or refunds`} saved on this device
+      and waiting to sync.
+    </p>
   );
 }
 
@@ -89,6 +106,7 @@ function SaleRow({ sale }: { sale: SaleSummary }) {
               {units} · {PAYMENT_LABEL[sale.paymentMethod]}
             </span>
             <RefundStateBadge state={sale.refundState} />
+            {sale.pending && <WaitingBadge />}
           </p>
           {sale.customerInfo && (
             <p className="text-muted text-sm break-words">{sale.customerInfo}</p>

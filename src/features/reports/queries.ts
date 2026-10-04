@@ -1,35 +1,21 @@
 // Server-side reads: Sales reports (FR-021, FR-022, FR-047). Leaf 5.1. Owner only: staff are
 // refused (FR-032). Gross profit also needs the cost capability, which only the owner has.
+// The report itself is built by ./sales-report.ts, which the offline app uses too (leaf 9.3).
 import { requireCapability } from "@/lib/auth";
-import {
-  manilaDateKey,
-  parseManilaDateKey,
-  periodBuckets,
-  periodRange,
-  periodTitle,
-  shiftPeriod,
-  type DateRange,
-  type ReportPeriod,
-} from "@/lib/dates";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { ok, type Result } from "@/lib/result";
-import { buildSalesReport, type SalesReportFigures } from "./report-math";
-import { reportFiltersSchema } from "./schemas";
+import { buildPeriodReport, reportWindow, type SalesReport } from "./sales-report";
 
-export type SalesReport = SalesReportFigures & {
-  period: ReportPeriod;
-  /** A Manila date inside the period, "2026-09-27". */
-  dateKey: string;
-  title: string;
-  range: DateRange;
-  /** Date keys of the neighbouring periods; `nextKey` is null for the current period. */
-  previousKey: string;
-  nextKey: string | null;
-  isCurrent: boolean;
-};
+export type { SalesReport };
 
 const productRef = { productId: true, productName: true, productCode: true, unitCost: true };
+/** Oldest first, so a product's name in the report (from its first line) is always the same one. */
+const reportOrder = [
+  { occurredAt: "asc" as const },
+  { recordedAt: "asc" as const },
+  { id: "asc" as const },
+];
 
 /** The report for the period in `rawFilters` (usually the page URL), as of `now`. */
 export async function getSalesReport(
@@ -38,11 +24,8 @@ export async function getSalesReport(
 ): Promise<Result<SalesReport>> {
   const auth = await requireCapability("reports.read");
   if (!auth.ok) return auth;
-  const filters = reportFiltersSchema.parse(rawFilters ?? {});
-  const anchor = (filters.date && parseManilaDateKey(filters.date)) || now;
-  const { period } = filters;
-  const range = periodRange(period, anchor);
-  const inRange = { gte: range.start, lt: range.end };
+  const window = reportWindow(rawFilters, now);
+  const inRange = { gte: window.range.start, lt: window.range.end };
 
   const [sales, refunds] = await Promise.all([
     db.sale.findMany({
@@ -57,6 +40,7 @@ export async function getSalesReport(
           orderBy: { id: "asc" },
         },
       },
+      orderBy: reportOrder,
     }),
     db.refund.findMany({
       where: { occurredAt: inRange },
@@ -64,30 +48,25 @@ export async function getSalesReport(
         occurredAt: true,
         amount: true,
         sale: { select: { paymentMethod: true } },
-        items: { select: { quantity: true, amount: true, saleItem: { select: productRef } } },
+        items: {
+          select: { quantity: true, amount: true, saleItem: { select: productRef } },
+          orderBy: { id: "asc" },
+        },
       },
+      orderBy: reportOrder,
     }),
   ]);
 
-  const figures = buildSalesReport({
-    sales,
-    refunds: refunds.map(({ sale, ...refund }) => ({
-      ...refund,
-      paymentMethod: sale.paymentMethod,
-    })),
-    buckets: periodBuckets(period, range),
-    includeProfit: can(auth.data.role, "products.cost"),
-  });
-
-  const isCurrent = now >= range.start && now < range.end;
-  return ok({
-    ...figures,
-    period,
-    dateKey: manilaDateKey(range.start),
-    title: periodTitle(period, range),
-    range,
-    previousKey: manilaDateKey(shiftPeriod(period, range.start, -1)),
-    nextKey: range.end > now ? null : manilaDateKey(range.end),
-    isCurrent,
-  });
+  return ok(
+    buildPeriodReport({
+      window,
+      sales,
+      refunds: refunds.map(({ sale, ...refund }) => ({
+        ...refund,
+        paymentMethod: sale.paymentMethod,
+      })),
+      includeProfit: can(auth.data.role, "products.cost"),
+      now,
+    }),
+  );
 }

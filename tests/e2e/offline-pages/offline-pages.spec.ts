@@ -125,20 +125,24 @@ test("[FR-049-PAGES] the owner opens every page offline with its data, including
   const shop = await seedShop(`${info.project.name}-o-${randomUUID().slice(0, 6)}`);
   await logInAs(page, "owner");
   await expect(page).toHaveURL(/\/dashboard/);
-  await waitUntilOfflineReady(page, shop.code, ["/dashboard", "/checkout", "/sales", "/reports"]);
+  await waitUntilOfflineReady(page, shop.code, ["/checkout"]);
 
   await context.setOffline(true);
   await expectNetworkCut(page);
 
-  // Pages kept as saved copies.
+  // The one page kept as a saved copy.
+  await page.goto("/checkout");
+  await expect(heading(page, "Checkout")).toBeVisible();
+
+  // Dashboard, sales, and reports are drawn from the device store (leaf 9.3).
   for (const [path, title] of [
     ["/dashboard", "Dashboard"],
-    ["/checkout", "Checkout"],
     ["/sales", "Sales"],
     ["/reports", "Sales reports"],
   ] as const) {
     await page.goto(path);
     await expect(heading(page, title), path).toBeVisible();
+    await expectNotOfflineNotice(page);
   }
 
   // Pages drawn from the device store, with their data.
@@ -199,7 +203,7 @@ test("[FR-055-ROLE-PAGES] [FR-049-PAGES] staff open their pages offline without 
   const shop = await seedShop(`${info.project.name}-s-${randomUUID().slice(0, 6)}`);
   await logInAs(page, "staff");
   await expect(page).toHaveURL(/\/dashboard/);
-  await waitUntilOfflineReady(page, shop.code, ["/dashboard", "/checkout", "/sales"]);
+  await waitUntilOfflineReady(page, shop.code, ["/checkout"]);
 
   await context.setOffline(true);
   await expectNetworkCut(page);
@@ -211,6 +215,7 @@ test("[FR-055-ROLE-PAGES] [FR-049-PAGES] staff open their pages offline without 
   ] as const) {
     await page.goto(path);
     await expect(heading(page, title), path).toBeVisible();
+    await expectNotOfflineNotice(page);
   }
 
   await page.goto(`/products?q=${encodeURIComponent(shop.code)}`);
@@ -240,15 +245,12 @@ test("[FR-055-ROLE-PAGES] [FR-049-PAGES] staff open their pages offline without 
 
   for (const path of ["/suppliers", "/users", "/categories", "/account", "/reports"]) {
     await page.goto(path);
-    if (path === "/reports") {
-      // Never saved for staff: the plain notice, never the owner's report.
-      await expect(page.getByRole("heading", { name: "You are offline" })).toBeVisible();
-    } else {
-      await expect(
-        page.getByRole("heading", { name: "You don't have access to this page" }),
-        path,
-      ).toBeVisible();
-    }
+    // Reports too: the offline app draws it, so staff get the same no-access page as online.
+    await expect(
+      page.getByRole("heading", { name: "You don't have access to this page" }),
+      path,
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sales reports" })).toHaveCount(0);
     await expect(page.getByText(shop.supplier)).toHaveCount(0);
   }
 

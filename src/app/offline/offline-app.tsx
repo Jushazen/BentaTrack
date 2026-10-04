@@ -1,6 +1,6 @@
 "use client";
 
-// The offline app (FR-049, FR-055; leaf 9.2). The service worker answers every page the network
+// The offline app (FR-049, FR-055; leaves 9.2, 9.3). The service worker answers every page the network
 // can't deliver with /offline, keeping the address the user asked for. This draws that page from
 // the device store inside the usual app shell, with the same views the server pages use, so it
 // looks and filters the same as online. It redraws when the device data changes (a sync).
@@ -15,10 +15,14 @@ import { OfflineCatalogSync } from "@/components/offline/offline-catalog-sync";
 import { SyncStatus } from "@/components/sync/sync-status";
 import { buttonClasses } from "@/components/ui/button";
 import { CategoriesView } from "@/features/categories/categories-view";
+import { DashboardView } from "@/features/dashboard/dashboard-view";
 import { HistoryView } from "@/features/inventory/history-view";
 import { ProductDetailView } from "@/features/products/product-detail-view";
 import { ProductFormView } from "@/features/products/product-form-view";
 import { ProductsView } from "@/features/products/products-view";
+import { SaleDetailView } from "@/features/refunds/sale-detail-view";
+import { SalesView } from "@/features/refunds/sales-view";
+import { ReportView } from "@/features/reports/report-view";
 import { SuppliersView } from "@/features/suppliers/suppliers-view";
 import { UsersView } from "@/features/users/users-view";
 import type { Role } from "@/generated/prisma/enums";
@@ -41,6 +45,10 @@ const TITLES: Record<OfflineRoute["page"], string> = {
   users: "Users",
   account: "My account",
   "inventory-history": "Inventory history",
+  dashboard: "Dashboard",
+  sales: "Sales",
+  sale: "Sale",
+  reports: "Reports",
 };
 
 /** The page asked for and who is signed in; null when the offline app can't draw it. */
@@ -71,20 +79,32 @@ function PageView({ data, role }: { data: OfflinePageData; role: Role }) {
       return <AccountView user={data.user} passwordMinLength={OFFLINE_PASSWORD_MIN_LENGTH} />;
     case "inventory-history":
       return <HistoryView history={data.history} />;
+    case "dashboard":
+      return <DashboardView result={data.dashboard} waitingToSync={data.waitingToSync} />;
+    case "sales":
+      return <SalesView sales={data.sales} waitingToSync={data.waitingToSync} />;
+    case "sale":
+      return <SaleDetailView role={role} sale={data.sale} />;
+    case "reports":
+      return <ReportView result={data.report} waitingToSync={data.waitingToSync} />;
   }
 }
 
-function NotFound() {
+function NotFound({ route }: { route: OfflineRoute }) {
+  const [thing, href, back] =
+    route.page === "sale"
+      ? ["sale", "/sales", "All sales"]
+      : ["product", "/products", "All products"];
   return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <h1 className="text-text">Product not found</h1>
+      <h1 className="text-text">{thing === "sale" ? "Sale" : "Product"} not found</h1>
       <p className="text-muted">
-        That product isn&apos;t on this device. It may have been added on another device since the
+        That {thing} isn&apos;t on this device. It may have been added on another device since the
         last sync.
       </p>
-      <Link href="/products" className={buttonClasses("secondary")}>
+      <Link href={href} className={buttonClasses("secondary")}>
         <ArrowLeft aria-hidden className="size-4 shrink-0" />
-        <span>All products</span>
+        <span>{back}</span>
       </Link>
     </div>
   );
@@ -149,7 +169,11 @@ export function OfflineApp({ forbidden }: { forbidden: ReactNode }) {
       lowStockCount={lowStockCount}
       status={<SyncStatus user={{ id: viewer.id, name: viewer.name }} />}
     >
-      {page.status === "ok" ? <PageView data={page.data} role={viewer.role} /> : <NotFound />}
+      {page.status === "ok" ? (
+        <PageView data={page.data} role={viewer.role} />
+      ) : (
+        <NotFound route={target.route} />
+      )}
       <LowStockOnOpen count={lowStockCount} />
       <OfflineCatalogSync />
     </AppShell>

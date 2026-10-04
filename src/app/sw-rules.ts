@@ -1,10 +1,11 @@
-// The service worker's caching rules (§4.9, §5.3, FR-049, FR-050). Leaves 6.1 and 9.2. Kept apart
-// from ./sw.ts so they can be unit-tested without a service worker.
-// - Pages drawn by the offline app (products, one product and its edit form, categories,
-//   suppliers, users, my account, inventory history) are never saved: offline they open in the
-//   offline app, which reads the device store, so they work even if never visited.
-// - Other pages are saved whenever they are opened online and kept with no age limit and no
-//   entry cap, so a shop that stays offline for days or weeks still has them (C96).
+// The service worker's caching rules (§4.9, §5.3, FR-049, FR-050). Leaves 6.1, 9.2, and 9.3. Kept
+// apart from ./sw.ts so they can be unit-tested without a service worker.
+// - Pages drawn by the offline app (dashboard, products, one product and its edit form,
+//   categories, suppliers, users, my account, inventory history, sales, one sale, reports) are
+//   never saved: offline they open in the offline app, which reads the device store, so they
+//   work even if never visited and show changes waiting to sync.
+// - Other pages (checkout) are saved whenever they are opened online and kept with no age limit
+//   and no entry cap, so a shop that stays offline for days or weeks still has them (C96).
 import { PAGES_CACHE_NAME } from "@serwist/turbopack/worker";
 import { NetworkFirst, NetworkOnly, type RuntimeCaching } from "serwist";
 import type { Role } from "@/generated/prisma/enums";
@@ -29,7 +30,7 @@ export const USER_CACHES = [
 ];
 
 /** Pages outside the offline app that each user keeps saved, if their role may open them. */
-export const SAVED_PAGES = ["/dashboard", "/checkout", "/sales", "/reports"] as const;
+export const SAVED_PAGES = ["/checkout"] as const;
 
 export function pagesToSave(role: Role): string[] {
   return SAVED_PAGES.filter((path) => {

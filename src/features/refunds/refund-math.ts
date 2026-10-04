@@ -50,3 +50,13 @@ export function refundAmounts(
     return amount;
   });
 }
+
+export type RefundState = "NONE" | "PARTIAL" | "FULL";
+
+/** Whether nothing, some, or all of a sale's units have been refunded. */
+export function refundState(items: { quantity: number; refundedQuantity: number }[]): RefundState {
+  const refunded = items.reduce((sum, item) => sum + item.refundedQuantity, 0);
+  if (refunded === 0) return "NONE";
+  const sold = items.reduce((sum, item) => sum + item.quantity, 0);
+  return refunded >= sold ? "FULL" : "PARTIAL";
+}
