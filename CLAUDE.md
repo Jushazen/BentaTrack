@@ -53,7 +53,7 @@ Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 �
 - **Sale** has many **SaleItems**; whole-sale discount (amount or percent); payment `CASH` or `GCASH` only.
 - **Refund** returns stock and money for part or all of a sale. **Restock** adds received units.
 - **InventoryChange** logs `SALE | RESTOCK | EDIT | REFUND | ARCHIVE | RESTORE` with user, delta, stock after, and product name/code snapshots.
-- **Offline:** sales, refunds, and restocks queue in an IndexedDB outbox and replay idempotently (client-generated UUIDs). Other edits currently need a connection, but SRS v2.1 FR-049 now requires every feature to work offline (not built yet).
+- **Offline (FR-049):** every page and feature works offline after one online login, from a role-scoped copy of the shop data on the device. Sales, refunds, restocks, and product, category, and supplier changes queue in an IndexedDB outbox and replay in order, idempotently (client-generated UUIDs). Managing user accounts and changing passwords need a connection and are never queued (C99).
 
 ## Rules
 
