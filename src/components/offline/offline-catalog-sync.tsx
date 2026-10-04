@@ -3,6 +3,9 @@
 // Keeps this device ready to work offline while a user is signed in (FR-050, FR-055; leaves
 // 6.1 and 9.1):
 // - asks the browser to keep the device data even after days without use;
+// - checks that the session still counts each time it refreshes (leaf 9.5): a device that was
+//   offline when its account was deactivated or its password was changed or reset signs out as
+//   soon as it reconnects, and the owner's data leaves it (FR-045, FR-060, FR-055);
 // - refreshes the device's copy of everything the user may see when the app opens, when the
 //   connection comes back, and when the app returns to the foreground after a while;
 // - asks the service worker to save the pages used offline, so they reload without a
@@ -14,12 +17,9 @@
 import { useSerwist } from "@serwist/turbopack/react";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import {
-  catalogSyncedAt,
-  requestPersistentStorage,
-  syncDeviceData,
-} from "@/lib/offline/catalog";
+import { catalogSyncedAt, requestPersistentStorage, syncDeviceData } from "@/lib/offline/catalog";
 import { matchOfflineRoute } from "@/lib/offline/read/routes";
+import { leaveIfSessionEnded } from "@/lib/offline/sync";
 
 /** Pages every signed-in user may need offline; the worker adds the owner's (src/app/sw-rules.ts). */
 const OFFLINE_PAGES = ["/dashboard", "/checkout", "/sales"];
@@ -36,6 +36,7 @@ export function OfflineCatalogSync() {
       if (running || !navigator.onLine) return;
       running = true;
       try {
+        if (await leaveIfSessionEnded()) return;
         if (onlyIfStale) {
           const syncedAt = await catalogSyncedAt();
           if (syncedAt && Date.now() - syncedAt.getTime() < STALE_AFTER_MS) return;

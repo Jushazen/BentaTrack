@@ -3,11 +3,16 @@
 // Online/offline indicator and the changes waiting to sync (FR-035, FR-051, FR-053, §3.4).
 // Leaf 6.2; every kind of change since leaf 9.4. Sits in the shell's top bar. Keeps the outbox
 // moving: it replays when the app opens, when the connection comes back, when the app returns to
-// the foreground, when a change is queued, and every 30 seconds while something is waiting. Tells the user when a sync finishes or fails. Opens a panel listing what
-// is waiting, with "Sync now" and, for a change the server refused, a deliberate "Discard".
+// the foreground, when a change is queued, and every 30 seconds while something is waiting. Tells
+// the user when a sync finishes or fails. Opens a panel listing what is waiting, with "Sync now"
+// and, for a change the server refused, a deliberate "Discard".
+// Leaf 9.5: a sync that finds this device's session ended (deactivated, or the password changed)
+// takes it to the sign-out page. Staff never see another person's waiting changes. The owner sees
+// those a deactivated staff member left here, by person, and can send them under that person's
+// name (FR-036, decided 2026-10-03); the server keeps only those made before the deactivation.
 import { format } from "date-fns";
 import { useLiveQuery } from "dexie-react-hooks";
-import { CloudOff, RefreshCw, Trash2, Wifi, WifiOff, X } from "lucide-react";
+import { CloudOff, RefreshCw, Send, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -15,15 +20,17 @@ import { showLowStockAlerts } from "@/components/layout/low-stock-alerts";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { forgetSnapshotCursor, refreshCatalog } from "@/lib/offline/catalog";
-import type { OutboxEntry } from "@/lib/offline/db";
+import { offlineDb, type DeviceUser, type OutboxEntry } from "@/lib/offline/db";
 import { outboxEntries, readEntry, removeEntry, type SyncUser } from "@/lib/offline/outbox";
 import {
   flushOutbox,
+  leaveIfSessionEnded,
   lowStockAlertsFrom,
   OUTBOX_QUEUED_EVENT,
   setSyncUser,
   type FlushReport,
 } from "@/lib/offline/sync";
+import { can } from "@/lib/permissions";
 
 const RETRY_EVERY_MS = 30_000;
 
@@ -52,20 +59,37 @@ type Row = {
   refusedBecause: string | null;
   /** Set when someone other than the signed-in user recorded it. */
   otherUser: string | null;
+  otherUserId: string | null;
 };
 
 function toRows(entries: OutboxEntry[], userId: string): Row[] {
   return entries.map((raw) => {
     const entry = readEntry(raw);
+    const other = entry && entry.payload.userId !== userId ? entry.payload : null;
     return {
       id: raw.id,
       summary: entry?.payload.summary ?? "Unreadable change",
       createdAt: raw.createdAt,
       refusedBecause: raw.lastError,
-      otherUser: entry && entry.payload.userId !== userId ? entry.payload.userName : null,
+      otherUser: other?.userName ?? null,
+      otherUserId: other?.userId ?? null,
     };
   });
 }
+
+/** Deactivated accounts the device knows of; only an owner's device holds accounts (FR-055). */
+async function readDeactivated(): Promise<DeviceUser[]> {
+  try {
+    return await offlineDb()
+      .users.filter((user) => !user.active && user.role === "STAFF")
+      .toArray();
+  } catch {
+    return [];
+  }
+}
+
+/** A deactivated staff member's changes on this device, which the owner may send. */
+type Leftover = { userId: string; name: string; rows: Row[] };
 
 async function readOutbox(): Promise<OutboxEntry[]> {
   try {
@@ -116,10 +140,25 @@ export function SyncStatus({ user }: { user: SyncUser }) {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const entries = useLiveQuery(readOutbox, [], []);
-  const rows = toRows(entries, user.id);
-  const mine = rows.filter((row) => row.otherUser === null);
+  const isOwner = user.role !== undefined && can(user.role, "users.manage");
+  const deactivated = useLiveQuery(readDeactivated, [], []);
+  const allRows = toRows(entries, user.id);
+  const mine = allRows.filter((row) => row.otherUser === null);
   const waiting = mine.filter((row) => row.refusedBecause === null).length;
   const refused = mine.length - waiting;
+  // Staff never see another person's changes; the owner sees who left them.
+  const offAccounts = new Map(isOwner ? deactivated.map((u) => [u.id, u.name]) : []);
+  const leftovers: Leftover[] = [];
+  for (const row of allRows) {
+    const name = row.otherUserId ? offAccounts.get(row.otherUserId) : undefined;
+    if (!row.otherUserId || name === undefined) continue;
+    let group = leftovers.find((g) => g.userId === row.otherUserId);
+    if (!group) leftovers.push((group = { userId: row.otherUserId, name, rows: [] }));
+    group.rows.push(row);
+  }
+  const rows = allRows.filter(
+    (row) => row.otherUserId === null || (isOwner && !offAccounts.has(row.otherUserId)),
+  );
 
   useEffect(() => {
     setSyncUser(user);
@@ -127,7 +166,7 @@ export function SyncStatus({ user }: { user: SyncUser }) {
   }, [user]);
 
   const sync = useCallback(
-    async (manual: boolean) => {
+    async (manual: boolean, sendFor?: string) => {
       if (!navigator.onLine) {
         if (manual) {
           toast.error("You're offline. Changes will sync when you're back online.", {
@@ -138,7 +177,9 @@ export function SyncStatus({ user }: { user: SyncUser }) {
       }
       setSyncing(true);
       try {
-        const report = await flushOutbox({ includeRefused: manual });
+        const report = await flushOutbox({ includeRefused: manual, sendFor });
+        // The session may have ended while the device was offline (FR-045, FR-060).
+        if (report.stopped === "signed-out" && (await leaveIfSessionEnded())) return;
         const left = (await readOutbox()).length;
         announce(report, manual, left);
         if (report.synced.length > 0) {
@@ -256,8 +297,60 @@ export function SyncStatus({ user }: { user: SyncUser }) {
               : "You're offline. Changes are saved on this device and sync when you're back online."}
           </p>
 
+          {leftovers.map((group) => (
+            <section
+              key={group.userId}
+              aria-label={`Changes by ${group.name}`}
+              className="border-border space-y-3 rounded-lg border p-3"
+            >
+              <p className="text-text font-medium">
+                {group.rows.length === 1 ? "1 change" : `${group.rows.length} changes`} by{" "}
+                {group.name}, account deactivated
+              </p>
+              <p className="text-muted text-sm">
+                Sending saves them under {group.name}&apos;s name. Only changes made before the
+                account was deactivated are kept.
+              </p>
+              <ul aria-label={`${group.name}'s changes`} className="divide-border divide-y">
+                {group.rows.map((row) => (
+                  <li key={row.id} aria-label={row.summary} className="space-y-2 py-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <p className="text-text">{row.summary}</p>
+                      <p className="text-muted text-sm tabular-nums">
+                        {format(row.createdAt, "d MMM, h:mm a")}
+                      </p>
+                    </div>
+                    {row.refusedBecause !== null && (
+                      <>
+                        <p className="text-danger flex items-start gap-2 text-sm">
+                          <CloudOff aria-hidden className="mt-0.5 size-4 shrink-0" />
+                          <span>Couldn&apos;t sync: {row.refusedBecause}</span>
+                        </p>
+                        <ConfirmButton
+                          icon={Trash2}
+                          label="Discard"
+                          question="Discard this change? It will never reach the server."
+                          confirmLabel="Yes, discard"
+                          onConfirm={() => discard(row.id)}
+                        />
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="secondary"
+                icon={Send}
+                onClick={() => void sync(true, group.userId)}
+                disabled={syncing || !online}
+              >
+                {`Send ${group.name}'s changes`}
+              </Button>
+            </section>
+          ))}
+
           {rows.length === 0 ? (
-            <p className="text-text">Everything is synced.</p>
+            leftovers.length === 0 && <p className="text-text">Everything is synced.</p>
           ) : (
             <ul aria-label="Changes waiting to sync" className="divide-border divide-y">
               {rows.map((row) => (

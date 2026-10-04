@@ -49,16 +49,16 @@ export async function createStaffUser(input: CreateStaffUserInput): Promise<Resu
 }
 
 /** Loads a staff account the owner may change, or explains why not. */
-async function findStaff(userId: string): Promise<Result<{ id: string }>> {
+async function findStaff(userId: string): Promise<Result<{ id: string; active: boolean }>> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true },
+    select: { id: true, role: true, active: true },
   });
   if (!user) return fail("NOT_FOUND", "That account no longer exists.");
   if (user.role !== "STAFF") {
     return fail("FORBIDDEN", "Owner accounts can't be changed from this screen.");
   }
-  return ok({ id: user.id });
+  return ok({ id: user.id, active: user.active });
 }
 
 /** FR-045: sets a new password for a staff account and signs them out everywhere. */
@@ -79,7 +79,11 @@ export async function resetUserPassword(input: ResetPasswordInput): Promise<Resu
   return ok(user);
 }
 
-/** FR-045: deactivated users can't log in; their sales and history stay. */
+/**
+ * FR-045: deactivated users can't log in; their sales and history stay. When the account was
+ * turned off is kept: the owner can still send that person's changes left on a device from
+ * before then, and only those (FR-036, leaf 9.5).
+ */
 export async function setUserActive(input: SetUserActiveInput): Promise<Result<UserRow>> {
   const auth = await requireCapability("users.manage");
   if (!auth.ok) return auth;
@@ -90,7 +94,10 @@ export async function setUserActive(input: SetUserActiveInput): Promise<Result<U
   if (!target.ok) return target;
   const user = await db.user.update({
     where: { id: target.data.id },
-    data: { active: parsed.data.active },
+    // Deactivating an account that is already off keeps the time it was turned off.
+    data: parsed.data.active
+      ? { active: true, deactivatedAt: null }
+      : { active: false, ...(target.data.active && { deactivatedAt: new Date() }) },
     select: userRowSelect,
   });
   revalidatePath(USERS_PATH);

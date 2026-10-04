@@ -1,12 +1,14 @@
 "use client";
 
 // FR-060: the owner changes their own password, then is signed out here and everywhere else.
+// Needs a connection; it is never saved on the device to sync later (leaf 9.5).
 import { KeyRound } from "lucide-react";
 import { signOut } from "next-auth/react";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
+import { onlineOnly, PASSWORD_NEEDS_CONNECTION } from "@/features/users/online-only";
 import { changeOwnPassword } from "./actions";
 
 export function ChangePasswordForm({ passwordMinLength }: { passwordMinLength: number }) {
@@ -17,11 +19,15 @@ export function ChangePasswordForm({ passwordMinLength }: { passwordMinLength: n
     const data = new FormData(event.currentTarget);
     run(
       () =>
-        changeOwnPassword({
-          currentPassword: String(data.get("currentPassword") ?? ""),
-          newPassword: String(data.get("newPassword") ?? ""),
-          confirmPassword: String(data.get("confirmPassword") ?? ""),
-        }),
+        onlineOnly(
+          () =>
+            changeOwnPassword({
+              currentPassword: String(data.get("currentPassword") ?? ""),
+              newPassword: String(data.get("newPassword") ?? ""),
+              confirmPassword: String(data.get("confirmPassword") ?? ""),
+            }),
+          PASSWORD_NEEDS_CONNECTION,
+        ),
       {
         success: "Password changed. Log in again with your new password.",
         onSuccess: () => void signOut({ callbackUrl: "/login?signedOut=password" }),

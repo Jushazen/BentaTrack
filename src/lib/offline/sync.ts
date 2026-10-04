@@ -1,11 +1,14 @@
 // Sending offline-capable commands and replaying the outbox (FR-034–036, FR-049, §3.4). Leaf 6.2.
 // runCommand() is how every form that changes data saves: sales, refunds, and restocks (leaf
-// 6.2), and products, categories, and suppliers (leaf 9.4). The command is written to the outbox
+// 6.2), and products, categories, and suppliers (leaf 9.4). Account and password changes need a
+// connection and don't come through here (FR-049, leaf 9.5). The command is written to the outbox
 // first, then sent to /api/sync. No answer (offline, timeout, server down) leaves it queued; any
 // answer settles it. flushOutbox() later sends what is queued, oldest first. Every command
 // carries its client-generated UUID, so sending one twice never applies it twice.
 // A change that needs something still waiting in the outbox (a refund of an unsynced sale, a
 // product in a category added offline) waits behind it, so the server gets them in order.
+// checkServerSession() asks whether this device's session still counts (leaf 9.5): one ended by
+// deactivation or a password change, while the device was offline, signs out when it reconnects.
 // Browser only.
 import type { LowStockAlert } from "@/components/layout/low-stock-alerts";
 import {
@@ -310,10 +313,18 @@ export type FlushReport = {
   answers: Record<string, Result<unknown>>;
 };
 
-async function flush(includeRefused: boolean, db: OfflineDb): Promise<FlushReport> {
+async function flush(
+  includeRefused: boolean,
+  sendFor: string | null,
+  db: OfflineDb,
+): Promise<FlushReport> {
   const report: FlushReport = { synced: [], refused: [], stopped: null, answers: {} };
   const user = currentUser;
   if (!user) return report;
+  // Whose changes this replay sends: the signed-in user's own, or (the owner's choice) those a
+  // deactivated staff member left on this device (FR-036). The server checks both again.
+  const recorder = sendFor && user.role && can(user.role, "users.manage") ? sendFor : user.id;
+  if (sendFor && recorder !== sendFor) return report;
 
   for (const raw of await outboxEntries(db)) {
     const entry = readEntry(raw);
@@ -324,11 +335,11 @@ async function flush(includeRefused: boolean, db: OfflineDb): Promise<FlushRepor
       continue;
     }
     // Only the person who recorded it may send it (§5.2); it waits for them to sign in.
-    if (entry.payload.userId !== user.id) continue;
+    if (entry.payload.userId !== recorder) continue;
     if (entry.lastError !== null && !includeRefused) continue;
     if (inFlight.has(entry.id)) continue;
 
-    const result = await sendCommand(entry.kind, entry.payload.input, user.id);
+    const result = await sendCommand(entry.kind, entry.payload.input, recorder);
     if (result === null) {
       await countAttempt(entry.id, db);
       report.stopped = "offline";
@@ -364,17 +375,20 @@ let running: Promise<FlushReport> | null = null;
  * Sends the signed-in user's queued commands, oldest first (FR-035). Stops at the first one
  * that gets no answer, keeping it and everything after it. Refused commands are kept with their
  * reason and skipped next time unless `includeRefused` (the user's "Sync now") asks to retry.
+ * `sendFor` is the owner's "Send" for a deactivated staff member's changes: only theirs are sent,
+ * refused ones included, still under their name (FR-036, leaf 9.5).
  * Only one replay runs at a time; a routine call during one shares its result.
  */
 export function flushOutbox(
-  options: { includeRefused?: boolean; db?: OfflineDb } = {},
+  options: { includeRefused?: boolean; sendFor?: string; db?: OfflineDb } = {},
 ): Promise<FlushReport> {
-  const { includeRefused = false, db = offlineDb() } = options;
+  const { sendFor = null, db = offlineDb() } = options;
+  const includeRefused = (options.includeRefused ?? false) || sendFor !== null;
   if (running && !includeRefused) return running;
   const previous = running;
   const next: Promise<FlushReport> = (async () => {
     if (previous) await previous.catch(() => undefined);
-    return withDeviceLock(() => flush(includeRefused, db));
+    return withDeviceLock(() => flush(includeRefused, sendFor, db));
   })().finally(() => {
     if (running === next) running = null;
   });
@@ -401,6 +415,62 @@ async function sendInLine(id: string, db: OfflineDb): Promise<Result<unknown> | 
     if (report.stopped) return null;
   }
   return null;
+}
+
+// ---- Is this device's session still good? (FR-045, FR-060; leaf 9.5) -----------------------
+
+export type ServerSession =
+  | { state: "active"; userId: string }
+  | { state: "ended"; reason: "password" | "deactivated" }
+  | { state: "signed-out" }
+  | { state: "unreachable" };
+
+/** Asks the server whether this device's session still counts. */
+export async function checkServerSession(): Promise<ServerSession> {
+  let response: Response;
+  try {
+    response = await fetch(SYNC_URL, {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+  } catch {
+    return { state: "unreachable" };
+  }
+  if (response.status === 401) return { state: "signed-out" };
+  if (response.redirected && new URL(response.url).pathname === "/login") {
+    return { state: "signed-out" };
+  }
+  let body: unknown;
+  try {
+    body = response.ok ? await response.json() : null;
+  } catch {
+    body = null;
+  }
+  if (!isResult(body) || !body.ok) return { state: "unreachable" };
+  const data = body.data as { ended?: unknown; userId?: unknown };
+  if (data.ended === "password" || data.ended === "deactivated") {
+    return { state: "ended", reason: data.ended };
+  }
+  if (typeof data.userId !== "string") return { state: "unreachable" };
+  return { state: "active", userId: data.userId };
+}
+
+/** The page that signs this device out and removes the owner's data, with the reason shown. */
+export function sessionEndedUrl(reason: "password" | "deactivated"): string {
+  return `/session-ended?reason=${reason}`;
+}
+
+/**
+ * Checks the session and, if it was ended (deactivated, or the password changed or was reset on
+ * any device), takes this device to the sign-out page. Queued changes stay on the device. Returns
+ * true when it did.
+ */
+export async function leaveIfSessionEnded(): Promise<boolean> {
+  const session = await checkServerSession();
+  if (session.state !== "ended") return false;
+  window.location.assign(sessionEndedUrl(session.reason));
+  return true;
 }
 
 /** Low-stock pop-ups owed for sales that just synced (FR-008). */

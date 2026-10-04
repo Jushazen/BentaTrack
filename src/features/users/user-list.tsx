@@ -1,6 +1,7 @@
 "use client";
 
 // FR-045: every account, with reset-password and deactivate/reactivate for staff accounts.
+// Changes need a connection; offline the page still opens from the device (leaf 9.5).
 import { KeyRound, Save, UserCheck, UserX, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { ConfirmButton } from "@/components/ui/confirm-button";
 import { TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
 import { resetUserPassword, setUserActive } from "./actions";
+import { onlineOnly } from "./online-only";
 import type { UserRow } from "./queries";
 
 function ResetPasswordForm({
@@ -25,7 +27,7 @@ function ResetPasswordForm({
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const password = String(new FormData(event.currentTarget).get("password") ?? "");
-    run(() => resetUserPassword({ userId: user.id, password }), {
+    run(() => onlineOnly(() => resetUserPassword({ userId: user.id, password })), {
       success: `New password saved for ${user.name}.`,
       onSuccess: onDone,
     });
@@ -62,7 +64,7 @@ function UserItem({ user, passwordMinLength }: { user: UserRow; passwordMinLengt
 
   function toggleActive() {
     const active = !user.active;
-    run(() => setUserActive({ userId: user.id, active }), {
+    run(() => onlineOnly(() => setUserActive({ userId: user.id, active })), {
       success: active ? `${user.name} can log in again.` : `${user.name} can no longer log in.`,
     });
   }

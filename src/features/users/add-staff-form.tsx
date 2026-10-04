@@ -1,12 +1,13 @@
 "use client";
 
-// FR-045: owner adds a staff account.
+// FR-045: owner adds a staff account. Needs a connection (leaf 9.5).
 import { UserPlus } from "lucide-react";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/field";
 import { useResultAction } from "@/components/ui/use-result-action";
 import { createStaffUser } from "./actions";
+import { onlineOnly } from "./online-only";
 
 export function AddStaffForm({ passwordMinLength }: { passwordMinLength: number }) {
   const { pending, fieldErrors, run } = useResultAction();
@@ -17,11 +18,13 @@ export function AddStaffForm({ passwordMinLength }: { passwordMinLength: number 
     const data = new FormData(form);
     run(
       () =>
-        createStaffUser({
-          name: String(data.get("name") ?? ""),
-          email: String(data.get("email") ?? ""),
-          password: String(data.get("password") ?? ""),
-        }),
+        onlineOnly(() =>
+          createStaffUser({
+            name: String(data.get("name") ?? ""),
+            email: String(data.get("email") ?? ""),
+            password: String(data.get("password") ?? ""),
+          }),
+        ),
       { success: (user) => `Account created for ${user.name}.`, onSuccess: () => form.reset() },
     );
   }

@@ -29,5 +29,5 @@ Run: `node .claude/skills/unlazy/scripts/gate-check.mjs --root . --cwd . --timeo
   EXPECT: /\d+ passed/
   EVIDENCE: pending
 
-- [ ] N5: the children's manual gates (leaf-9.5:G3, leaf-9.6:G3) were reviewed at branch level
+- [ ] N5: the children's manual gate (leaf-9.6:G3) was reviewed at branch level (leaf-9.5 no longer has one)
   EVIDENCE: pending

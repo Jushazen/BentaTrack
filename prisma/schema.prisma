@@ -45,6 +45,9 @@ model User {
   active         Boolean  @default(true)
   /// Copied into each login's session; raising it ends every session of this user (FR-060, FR-045).
   sessionVersion Int      @default(0)
+  /// When the account was last deactivated (device time of the change); null while active. A
+  /// deactivated staff member's queued changes are accepted only if made before it (FR-036, leaf 9.5).
+  deactivatedAt  DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

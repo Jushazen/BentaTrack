@@ -4,6 +4,7 @@
 // request, so deactivation and role changes take effect immediately (FR-045, §5.2).
 // Each session also carries the user's sessionVersion from login; raising it in the database
 // (password change or reset) ends every session of that user on every device (FR-060).
+import { AsyncLocalStorage } from "node:async_hooks";
 import bcrypt from "bcryptjs";
 import { getServerSession, type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -137,8 +138,22 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
+/** Set by /api/sync while the owner sends a deactivated staff member's changes (leaf 9.5). */
+const recorder = new AsyncLocalStorage<SessionUser>();
+
+/**
+ * Runs `work` with `user` as the current user, so the actions it calls record it under that
+ * person (§5.2) and allow only what their role may do. Only for /api/sync, after it has checked
+ * that the signed-in owner may send this person's changes (FR-036, decided 2026-10-03).
+ */
+export function runAsRecorder<T>(user: SessionUser, work: () => Promise<T>): Promise<T> {
+  return recorder.run(user, work);
+}
+
 /** For server components, route handlers, and actions. Always re-checked against the database. */
 export async function getCurrentUser(): Promise<SessionUser | null> {
+  const sendingFor = recorder.getStore();
+  if (sendingFor) return sendingFor;
   return (await currentSession()).user;
 }
 
