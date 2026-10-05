@@ -26,7 +26,24 @@
 
 # misc
 .DS_Store
+
+# secrets and credentials: never commit these
 *.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+.npmrc
+.netrc
+*credentials*.json
+*service-account*.json
+*.secret
+secrets/
 
 # debug
 npm-debug.log*
@@ -53,8 +70,12 @@ next-env.d.ts
 /public/sw.js.map
 /public/swe-worker-*.js
 
-# claude code local settings
-.claude/settings.local.json
+# local-only tooling and working files (not part of the app)
+/.claude
+/.tastemaker
+/.unlazy
+/docs
+/tests
 
 # unlazy runtime state (plans and ledgers are committed; machine state is not)
 .unlazy-hook-state.json
@@ -70,3 +91,9 @@ unlazy-status.log
 
 # vitest local results cache
 /.vitest
+
+# database dumps and backups (may contain customer and sales data)
+*.sql.gz
+*.dump
+*.backup
+*.bak
